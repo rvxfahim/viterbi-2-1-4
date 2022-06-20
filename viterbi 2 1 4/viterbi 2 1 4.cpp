@@ -7,7 +7,7 @@ using namespace std;
 using namespace std::chrono;
 class FinalHammingDistance {
 public:
-    int finalStates[8] = { -1,-1,-1,-1,-1,-1,-1,-1 };
+    int finalStates[8] = {0,0,0,0,0,0,0,0};
     //int finalStates[4] ;
 };
 class CorrectSequence {
@@ -24,7 +24,7 @@ public:
     int cTransition[2];
     int dTransition[2];
     int eTransition[2];
-    int fTransition[3];
+    int fTransition[2];
     int gTransition[2];
     int hTransition[2];
     int previousHammingDistance[8];
@@ -33,7 +33,7 @@ public:
 
 
     HammingTable(int step, int bits[2]) {
-        for (int i = 0; i < 7; i++) {
+        for (int i = 0; i < 8; i++) {
             this->previousHammingDistance[i] = 0;
         }
         this->step = step;
@@ -43,7 +43,7 @@ public:
     }
 
     HammingTable(int previousValue[8], int step, int bits[2]) {
-        for (int i = 0; i < 7; i++) {
+        for (int i = 0; i < 8; i++) {
             this->previousHammingDistance[i] = previousValue[i];
         }
 
@@ -149,7 +149,7 @@ public:
             cout << "Debug:  " << endl;
             //                cout<< "Step: "<< this->step<< endl;
             //                cout<< "Previous Hamming: "<< this->previousHammingDistance[1]<< endl;
-            cout << "executing case d" << endl;
+            cout << "executing case f" << endl;
             cout << "Debug End:" << endl;
             fTransition[0] = this->calculateDistanceForTransition(0, 0, this->previousHammingDistance[5]);
             fTransition[1] = this->calculateDistanceForTransition(1, 1, this->previousHammingDistance[5]);
@@ -161,7 +161,7 @@ public:
             {
                 fTransition[0] = -1;
             }
-            if (dTransition[1] < hammingDistances.finalStates[6]) {
+            if (fTransition[1] < hammingDistances.finalStates[6]) {
                 hammingDistances.finalStates[6] = fTransition[1];
                 eTransition[1] = -1;
             }
@@ -174,7 +174,7 @@ public:
             cout << "Debug:  " << endl;
             //                cout<< "Step: "<< this->step<< endl;
             //                cout<< "Previous Hamming: "<< this->previousHammingDistance[1]<< endl;
-            cout << "executing case e" << endl;
+            cout << "executing case g" << endl;
             cout << "Debug End:" << endl;
             gTransition[0] = this->calculateDistanceForTransition(0, 1, this->previousHammingDistance[6]);
             gTransition[1] = this->calculateDistanceForTransition(1, 0, this->previousHammingDistance[6]);
@@ -185,11 +185,12 @@ public:
             cout << "Debug:  " << endl;
             //                cout<< "Step: "<< this->step<< endl;
             //                cout<< "Previous Hamming: "<< this->previousHammingDistance[1]<< endl;
-            cout << "executing case e" << endl;
+            cout << "executing case h" << endl;
             cout << "Debug End:" << endl;
             hTransition[0] = this->calculateDistanceForTransition(1, 0, this->previousHammingDistance[7]);
             hTransition[1] = this->calculateDistanceForTransition(0, 1, this->previousHammingDistance[7]);
             if (hTransition[0] < hammingDistances.finalStates[3]) {
+                cout << "replacing d with hTransition[0] " <<hTransition[0] << endl;
                 hammingDistances.finalStates[3] = hTransition[0];
                 gTransition[0] = -1;
             }
@@ -198,7 +199,7 @@ public:
                 hTransition[0] = -1;
             }
             if (hTransition[1] < hammingDistances.finalStates[7]) {
-                hammingDistances.finalStates[7] = fTransition[1];
+                hammingDistances.finalStates[7] = hTransition[1];
                 gTransition[1] = -1;
             }
             else
@@ -246,7 +247,7 @@ public:
             this->calculateForState(4);
             this->calculateForState(6);
         }
-        if (this->step >= 3)
+        if (this->step >= 4)
         {
             this->calculateForState(0);
             this->calculateForState(1);
@@ -257,6 +258,7 @@ public:
             this->calculateForState(6);
             this->calculateForState(7);
         }
+
     }
 
     FinalHammingDistance getFinalHammingDistance() {
@@ -363,39 +365,79 @@ CorrectSequence getSequence(int stateA, int stateB) {
         bitSequence.bits[1] = 0;
         bitSequence.decoded = 0;
     }
-    else if (stateB == 0 && stateA == 2) {
+    else if (stateB == 0 && stateA == 1) {
         bitSequence.bits[0] = 1;
         bitSequence.bits[1] = 1;
         bitSequence.decoded = 0;
-    }
-    else if (stateB == 1 && stateA == 0) {
-        bitSequence.bits[0] = 1;
-        bitSequence.bits[1] = 1;
-        bitSequence.decoded = 1;
     }
     else if (stateB == 1 && stateA == 2) {
-        bitSequence.bits[0] = 0;
-        bitSequence.bits[1] = 0;
-        bitSequence.decoded = 1;
-    }
-    else if (stateB == 2 && stateA == 1) {
         bitSequence.bits[0] = 1;
         bitSequence.bits[1] = 0;
         bitSequence.decoded = 0;
     }
-    else if (stateB == 2 && stateA == 3) {
+    else if (stateB == 1 && stateA == 3) {
         bitSequence.bits[0] = 0;
         bitSequence.bits[1] = 1;
         bitSequence.decoded = 0;
     }
-    else if (stateB == 3 && stateA == 1) {
+    else if (stateB == 2 && stateA == 4) {
+        bitSequence.bits[0] = 1;
+        bitSequence.bits[1] = 1;
+        bitSequence.decoded = 0;
+    }
+    else if (stateB == 2 && stateA == 5) {
+        bitSequence.bits[0] = 0;
+        bitSequence.bits[1] = 0;
+        bitSequence.decoded = 0;
+    }
+    else if (stateB == 3 && stateA == 6) {
+        bitSequence.bits[0] = 0;
+        bitSequence.bits[1] = 1;
+        bitSequence.decoded = 0;
+    }
+    else if (stateB == 3 && stateA == 7) {
+        bitSequence.bits[0] = 1;
+        bitSequence.bits[1] = 0;
+        bitSequence.decoded = 0;
+    }
+    else if (stateB == 4 && stateA == 0) {
+        bitSequence.bits[0] = 1;
+        bitSequence.bits[1] = 1;
+        bitSequence.decoded = 1;
+    }
+    else if (stateB == 4 && stateA == 1) {
+        bitSequence.bits[0] = 0;
+        bitSequence.bits[1] = 0;
+        bitSequence.decoded = 1;
+    }
+    else if (stateB == 5 && stateA == 2) {
         bitSequence.bits[0] = 0;
         bitSequence.bits[1] = 1;
         bitSequence.decoded = 1;
     }
-    else if (stateB == 3 && stateA == 3) {
+    else if (stateB == 5 && stateA == 3) {
         bitSequence.bits[0] = 1;
         bitSequence.bits[1] = 0;
+        bitSequence.decoded = 1;
+    }
+    else if (stateB == 6 && stateA == 4) {
+        bitSequence.bits[0] = 0;
+        bitSequence.bits[1] = 0;
+        bitSequence.decoded = 1;
+    }
+    else if (stateB == 6 && stateA == 5) {
+        bitSequence.bits[0] = 1;
+        bitSequence.bits[1] = 1;
+        bitSequence.decoded = 1;
+    }
+    else if (stateB == 7 && stateA == 6) {
+        bitSequence.bits[0] = 1;
+        bitSequence.bits[1] = 0;
+        bitSequence.decoded = 1;
+    }
+    else if (stateB == 7 && stateA == 7) {
+        bitSequence.bits[0] = 0;
+        bitSequence.bits[1] = 1;
         bitSequence.decoded = 1;
     }
     return bitSequence;
@@ -407,15 +449,20 @@ void main() {
     int bits[2] = { 1, 1 };
     HammingTable h1(1, bits);
     h1.computeHammingDistance();
-    bits[0] = 0;
+    bits[0] = 1;
     bits[1] = 1;
     FinalHammingDistance oldHam = h1.getFinalHammingDistance();
-    int previousValues[4] = { oldHam.finalStates[0], oldHam.finalStates[1], oldHam.finalStates[2],
-                             oldHam.finalStates[3] };
+    int previousValues[8] = { oldHam.finalStates[0], oldHam.finalStates[1], oldHam.finalStates[2],
+                             oldHam.finalStates[3], oldHam.finalStates[4], oldHam.finalStates[5], oldHam.finalStates[6] ,oldHam.finalStates[7]};
     cout << "a: " << previousValues[0];
     cout << " b: " << previousValues[1];
     cout << " c: " << previousValues[2];
-    cout << " d: " << previousValues[3] << endl;
+    cout << " d: " << previousValues[3];
+    cout << " e: " << previousValues[4];
+    cout << " f: " << previousValues[5];
+    cout << " g: " << previousValues[6];
+    cout << " h: " << previousValues[7] << endl;
+
     HammingTable h2(previousValues, 2, bits);
     h2.computeHammingDistance();
     //bits[0] = 0;
@@ -425,11 +472,19 @@ void main() {
     previousValues[1] = oldHam.finalStates[1];
     previousValues[2] = oldHam.finalStates[2];
     previousValues[3] = oldHam.finalStates[3];
+    previousValues[4] = oldHam.finalStates[4];
+    previousValues[5] = oldHam.finalStates[5];
+    previousValues[6] = oldHam.finalStates[6];
+    previousValues[7] = oldHam.finalStates[7];
+    
     cout << "a: " << previousValues[0];
     cout << " b: " << previousValues[1];
     cout << " c: " << previousValues[2];
-    cout << " d: " << previousValues[3] << endl;
-
+    cout << " d: " << previousValues[3];
+    cout << " e: " << previousValues[4];
+    cout << " f: " << previousValues[5];
+    cout << " g: " << previousValues[6];
+    cout << " h: " << previousValues[7] << endl;
 
     bits[0] = 0;
     bits[1] = 1;
@@ -440,14 +495,22 @@ void main() {
     previousValues[1] = oldHam.finalStates[1];
     previousValues[2] = oldHam.finalStates[2];
     previousValues[3] = oldHam.finalStates[3];
-    cout << "a:" << previousValues[0];
+    previousValues[4] = oldHam.finalStates[4];
+    previousValues[5] = oldHam.finalStates[5];
+    previousValues[6] = oldHam.finalStates[6];
+    previousValues[7] = oldHam.finalStates[7];
+    cout << "a: " << previousValues[0];
     cout << " b: " << previousValues[1];
     cout << " c: " << previousValues[2];
-    cout << " d: " << previousValues[3] << endl;
+    cout << " d: " << previousValues[3];
+    cout << " e: " << previousValues[4];
+    cout << " f: " << previousValues[5];
+    cout << " g: " << previousValues[6];
+    cout << " h: " << previousValues[7] << endl;
 
 
     bits[0] = 1;
-    bits[1] = 0;
+    bits[1] = 1;
     HammingTable h4(previousValues, 4, bits);
     h4.computeHammingDistance();
     oldHam = h4.getFinalHammingDistance();
@@ -455,10 +518,18 @@ void main() {
     previousValues[1] = oldHam.finalStates[1];
     previousValues[2] = oldHam.finalStates[2];
     previousValues[3] = oldHam.finalStates[3];
-    cout << "a:" << previousValues[0];
+    previousValues[4] = oldHam.finalStates[4];
+    previousValues[5] = oldHam.finalStates[5];
+    previousValues[6] = oldHam.finalStates[6];
+    previousValues[7] = oldHam.finalStates[7];
+    cout << "a: " << previousValues[0];
     cout << " b: " << previousValues[1];
     cout << " c: " << previousValues[2];
-    cout << " d: " << previousValues[3] << endl;
+    cout << " d: " << previousValues[3];
+    cout << " e: " << previousValues[4];
+    cout << " f: " << previousValues[5];
+    cout << " g: " << previousValues[6];
+    cout << " h: " << previousValues[7] << endl;
 
 
     bits[0] = 0;
@@ -470,20 +541,86 @@ void main() {
     previousValues[1] = oldHam.finalStates[1];
     previousValues[2] = oldHam.finalStates[2];
     previousValues[3] = oldHam.finalStates[3];
-    cout << "a:" << previousValues[0];
+    previousValues[4] = oldHam.finalStates[4];
+    previousValues[5] = oldHam.finalStates[5];
+    previousValues[6] = oldHam.finalStates[6];
+    previousValues[7] = oldHam.finalStates[7];
+    cout << "a: " << previousValues[0];
     cout << " b: " << previousValues[1];
     cout << " c: " << previousValues[2];
-    cout << " d: " << previousValues[3] << endl;
+    cout << " d: " << previousValues[3];
+    cout << " e: " << previousValues[4];
+    cout << " f: " << previousValues[5];
+    cout << " g: " << previousValues[6];
+    cout << " h: " << previousValues[7] << endl;
+
+    bits[0] = 0;
+    bits[1] = 1;
+    HammingTable h6(previousValues, 6, bits);
+    h6.computeHammingDistance();
+    oldHam = h6.getFinalHammingDistance();
+    previousValues[0] = oldHam.finalStates[0];
+    previousValues[1] = oldHam.finalStates[1];
+    previousValues[2] = oldHam.finalStates[2];
+    previousValues[3] = oldHam.finalStates[3];
+    previousValues[4] = oldHam.finalStates[4];
+    previousValues[5] = oldHam.finalStates[5];
+    previousValues[6] = oldHam.finalStates[6];
+    previousValues[7] = oldHam.finalStates[7];
+    cout << "a: " << previousValues[0];
+    cout << " b: " << previousValues[1];
+    cout << " c: " << previousValues[2];
+    cout << " d: " << previousValues[3];
+    cout << " e: " << previousValues[4];
+    cout << " f: " << previousValues[5];
+    cout << " g: " << previousValues[6];
+    cout << " h: " << previousValues[7] << endl;
+
+
+    bits[0] = 1;
+    bits[1] = 1;
+    HammingTable h7(previousValues, 7, bits);
+    h7.computeHammingDistance();
+    oldHam = h7.getFinalHammingDistance();
+    previousValues[0] = oldHam.finalStates[0];
+    previousValues[1] = oldHam.finalStates[1];
+    previousValues[2] = oldHam.finalStates[2];
+    previousValues[3] = oldHam.finalStates[3];
+    previousValues[4] = oldHam.finalStates[4];
+    previousValues[5] = oldHam.finalStates[5];
+    previousValues[6] = oldHam.finalStates[6];
+    previousValues[7] = oldHam.finalStates[7];
+    cout << "a: " << previousValues[0];
+    cout << " b: " << previousValues[1];
+    cout << " c: " << previousValues[2];
+    cout << " d: " << previousValues[3];
+    cout << " e: " << previousValues[4];
+    cout << " f: " << previousValues[5];
+    cout << " g: " << previousValues[6];
+    cout << " h: " << previousValues[7] << endl;
+
     CorrectSequence sequenceBits;
-    cout << "Final Lowest State: " << h5.getFinalLowestState() << endl;
-    int previousState = h5.getReturnPath(h5.getFinalLowestState());
+    cout << "Final Lowest State: " << h7.getFinalLowestState() << endl;
+    int previousState = h7.getReturnPath(h7.getFinalLowestState());
     cout << "Previous Lowest State: " << previousState << endl;
-    sequenceBits = getSequence(previousState, h5.getFinalLowestState());
+    sequenceBits = getSequence(previousState, h7.getFinalLowestState());
     cout << "Bits: " << sequenceBits.bits[0] << sequenceBits.bits[1] << endl;
     cout << "Bits: " << sequenceBits.decoded << endl;
-    int newState = h4.getReturnPath(previousState);
+    int newState = h6.getReturnPath(previousState);
     cout << "Previous Lowest State: " << newState << endl;
     //sequenceBits = getSequence(previousState, newState);
+    sequenceBits = getSequence(newState, previousState);
+    cout << "Bits: " << sequenceBits.bits[0] << sequenceBits.bits[1] << endl;
+    cout << "Bits: " << sequenceBits.decoded << endl;
+    previousState = newState;
+    newState = h5.getReturnPath(previousState);
+    cout << "Previous Lowest State: " << newState << endl;
+    sequenceBits = getSequence(newState, previousState);
+    cout << "Bits: " << sequenceBits.bits[0] << sequenceBits.bits[1] << endl;
+    cout << "Bits: " << sequenceBits.decoded << endl;
+    previousState = newState;
+    newState = h4.getReturnPath(previousState);
+    cout << "Previous Lowest State: " << newState << endl;
     sequenceBits = getSequence(newState, previousState);
     cout << "Bits: " << sequenceBits.bits[0] << sequenceBits.bits[1] << endl;
     cout << "Bits: " << sequenceBits.decoded << endl;
@@ -505,6 +642,9 @@ void main() {
     sequenceBits = getSequence(newState, previousState);
     cout << "Bits: " << sequenceBits.bits[0] << sequenceBits.bits[1] << endl;
     cout << "Bits: " << sequenceBits.decoded << endl;
+
+
+
 
     auto stop = high_resolution_clock::now();
     auto duration = duration_cast<microseconds>(stop - start);
