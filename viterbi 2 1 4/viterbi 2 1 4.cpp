@@ -273,32 +273,68 @@ public:
                 previousState = 0;
             }
             else {
-                previousState = 2;
+                previousState = 1;
             }
             break;
         case 1:
-            if (aTransition[1] != -1) {
-                previousState = 0;
-            }
-            else {
+            if (cTransition[0] != -1) {
                 previousState = 2;
-            }
-            break;
-        case 2:
-            if (bTransition[0] != -1) {
-                previousState = 1;
             }
             else {
                 previousState = 3;
+            }
+            break;
+        case 2:
+            if (eTransition[0] != -1) {
+                previousState = 4;
+            }
+            else {
+                previousState = 5;
             }
             break;
         case 3:
             //cout << "B1:" << bTransition[1] << endl;
-            if (bTransition[1] != -1) {
+            if (gTransition[0] != -1) {
+                previousState = 6;
+            }
+            else {
+                previousState = 7;
+            }
+            break;
+        case 4:
+            //cout << "B1:" << bTransition[1] << endl;
+            if (aTransition[1] != -1) {
+                previousState = 0;
+            }
+            else {
                 previousState = 1;
+            }
+            break;
+        case 5:
+            //cout << "B1:" << bTransition[1] << endl;
+            if (cTransition[1] != -1) {
+                previousState = 2;
             }
             else {
                 previousState = 3;
+            }
+            break;
+        case 6:
+            //cout << "B1:" << bTransition[1] << endl;
+            if (eTransition[1] != -1) {
+                previousState = 4;
+            }
+            else {
+                previousState = 5;
+            }
+            break;
+        case 7:
+            //cout << "B1:" << bTransition[1] << endl;
+            if (gTransition[1] != -1) {
+                previousState = 6;
+            }
+            else {
+                previousState = 7;
             }
             break;
         }
@@ -307,8 +343,8 @@ public:
     int getFinalLowestState() {
         int lowestValue = this->hammingDistances.finalStates[0];
         int i = 0;
-        int lowest_state;
-        for (i = 0; i < 7; i++) {
+        int lowest_state=lowestValue;
+        for (i = 0; i < 8; i++) {
             if (this->hammingDistances.finalStates[i] < lowestValue) {
                 lowestValue = this->hammingDistances.finalStates[i];
                 cout << "debug start lowest value" << endl;
@@ -602,13 +638,13 @@ void main() {
     CorrectSequence sequenceBits;
     cout << "Final Lowest State: " << h7.getFinalLowestState() << endl;
     int previousState = h7.getReturnPath(h7.getFinalLowestState());
-    cout << "Previous Lowest State: " << previousState << endl;
+    cout << "Tracked path State: " << previousState << endl;
     sequenceBits = getSequence(previousState, h7.getFinalLowestState());
     cout << "Bits: " << sequenceBits.bits[0] << sequenceBits.bits[1] << endl;
     cout << "Bits: " << sequenceBits.decoded << endl;
     int newState = h6.getReturnPath(previousState);
     cout << "Previous Lowest State: " << newState << endl;
-    //sequenceBits = getSequence(previousState, newState);
+    sequenceBits = getSequence(previousState, newState);
     sequenceBits = getSequence(newState, previousState);
     cout << "Bits: " << sequenceBits.bits[0] << sequenceBits.bits[1] << endl;
     cout << "Bits: " << sequenceBits.decoded << endl;
