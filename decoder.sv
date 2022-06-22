@@ -1,17 +1,25 @@
-module decoder(clk, reset, data, out);
+module decoder(clk, reset, data, out, ready);
  
   input clk;
   input reset;
   input [13:0] data;
+  input ready;
   output reg [6:0] out;
   logic high;
   logic low;
-  
+  wire [13:0]data;
   assign high = 1;
   assign low = 0;
   logic toggle_flag;
   logic [4:0]steps_n;
   logic [4:0]stage_n;
+  reg[4:0] temp_states[0:7];
+  reg[4:0] lowest_value;
+  reg[2:0] lowest_index;
+  reg [2:0] returned_path;
+  byte counter_for_path;
+  byte pinOut;
+  byte table_counter;
   typedef struct{
 	logic [4:0]finalStates[0:7];
 } FinalHammingDistance;
@@ -48,7 +56,7 @@ module decoder(clk, reset, data, out);
 	        i=0;
           
           for (i = 0;i<8 ;i=i+1 ) begin
-          h1.hammingDistances.finalStates[i] = 0;  
+          h1.hammingDistances.finalStates[i] =   0;  
           end
           for (i = 0;i<8 ;i=i+1 ) begin
             h2.hammingDistances.finalStates[i] = 0;
@@ -71,9 +79,11 @@ module decoder(clk, reset, data, out);
           for (i = 0;i<8 ;i=i+1 ) begin
             h7.hammingDistances.finalStates[i] = 0;
           end
+          pinOut = 0;
           
           steps_n = 1;
           stage_n=0;
+          table_counter = 7;
 	      end
 
 
@@ -175,11 +185,11 @@ module decoder(clk, reset, data, out);
                 
                 if ((h4.aTransition[0] + h3.hammingDistances.finalStates[0])<(h4.bTransition[0] + h3.hammingDistances.finalStates[1])) begin
                   h4.hammingDistances.finalStates[0]= h4.aTransition[0] + h3.hammingDistances.finalStates[0];
-                  h4.bTransition[0]=-1;
+                  h4.bTransition[0]=3;
                 end
                 else begin
                   h4.hammingDistances.finalStates[0]= h4.bTransition[0] + h3.hammingDistances.finalStates[1];
-                  h4.aTransition[0] = -1;
+                  h4.aTransition[0] = 3;
                 end
                 
                 stage_n = stage_n+1;
@@ -190,11 +200,11 @@ module decoder(clk, reset, data, out);
                 h4.dTransition[0] = compute_hamming_distance(data[7],data[6],low,high);
                 if ((h4.cTransition[0] + h3.hammingDistances.finalStates[2])<(h4.dTransition[0] + h3.hammingDistances.finalStates[3])) begin
                   h4.hammingDistances.finalStates[1]= h4.cTransition[0] + h3.hammingDistances.finalStates[2];
-                  h4.dTransition[0]=-1;
+                  h4.dTransition[0]=3;
                 end
                 else begin
                   h4.hammingDistances.finalStates[1]= h4.dTransition[0] + h3.hammingDistances.finalStates[3];
-                  h4.cTransition[0] = -1;
+                  h4.cTransition[0] = 3;
                 end
 
                 stage_n = stage_n+1;
@@ -206,11 +216,11 @@ module decoder(clk, reset, data, out);
                 
                 if ((h4.eTransition[0]+h3.hammingDistances.finalStates[4])<(h4.fTransition[0]+h3.hammingDistances.finalStates[5])) begin
                   h4.hammingDistances.finalStates[2]= h4.eTransition[0]+h3.hammingDistances.finalStates[4];
-                  h4.fTransition[0]=-1;
+                  h4.fTransition[0]=3;
                 end
                 else begin
                   h4.hammingDistances.finalStates[2] = h4.fTransition[0]+h3.hammingDistances.finalStates[5];
-                  h4.eTransition[0]=-1;
+                  h4.eTransition[0]=3;
                 end
                 stage_n = stage_n+1;
               end
@@ -221,11 +231,11 @@ module decoder(clk, reset, data, out);
                 h4.hammingDistances.finalStates[3] = ((h4.gTransition[0]+h3.hammingDistances.finalStates[6])<(h4.hTransition[0]+h3.hammingDistances.finalStates[7])) ? (h4.gTransition[0]+h3.hammingDistances.finalStates[6]) : (h4.hTransition[0]+h3.hammingDistances.finalStates[7]);
                 if ((h4.gTransition[0]+h3.hammingDistances.finalStates[6])<(h4.hTransition[0]+h3.hammingDistances.finalStates[7])) begin
                   h4.hammingDistances.finalStates[3]= h4.gTransition[0]+h3.hammingDistances.finalStates[6];
-                  h4.hTransition[0]=-1;
+                  h4.hTransition[0]=3;
                 end
                 else begin
                   h4.hammingDistances.finalStates[3]= h4.hTransition[0]+h3.hammingDistances.finalStates[7];
-                  h4.gTransition[0]=-1;
+                  h4.gTransition[0]=3;
                 end
                 stage_n = stage_n+1;
               end
@@ -235,11 +245,11 @@ module decoder(clk, reset, data, out);
                 h4.bTransition[1] = compute_hamming_distance(data[7],data[6],low,low);
                 if ((h4.aTransition[1] + h3.hammingDistances.finalStates[0])<(h4.bTransition[1] + h3.hammingDistances.finalStates[1])) begin
                   h4.hammingDistances.finalStates[4]= h4.aTransition[1] + h3.hammingDistances.finalStates[0];
-                  h4.bTransition[1]=-1;
+                  h4.bTransition[1]=3;
                 end
                 else begin
                   h4.hammingDistances.finalStates[4]= h4.bTransition[1] + h3.hammingDistances.finalStates[1];
-                  h4.aTransition[1] = -1;
+                  h4.aTransition[1] = 3;
                 end
                 stage_n = stage_n+1;
               end
@@ -249,11 +259,11 @@ module decoder(clk, reset, data, out);
                 h4.dTransition[1] = compute_hamming_distance(data[7],data[6],high,low);
                 if ((h4.cTransition[1] + h3.hammingDistances.finalStates[2])<(h4.dTransition[1] + h3.hammingDistances.finalStates[3])) begin
                   h4.hammingDistances.finalStates[5]= h4.cTransition[1] + h3.hammingDistances.finalStates[2];
-                  h4.dTransition[1]=-1;
+                  h4.dTransition[1]=3;
                 end
                 else begin
                   h4.hammingDistances.finalStates[5]= h4.dTransition[1] + h3.hammingDistances.finalStates[3];
-                  h4.cTransition[1] = -1;
+                  h4.cTransition[1] = 3;
                 end
                 stage_n = stage_n+1;
               end
@@ -263,11 +273,11 @@ module decoder(clk, reset, data, out);
                 h4.fTransition[1] = compute_hamming_distance(data[7],data[6],high,high);
                 if ((h4.eTransition[1] + h3.hammingDistances.finalStates[4])<(h4.fTransition[1] + h3.hammingDistances.finalStates[5])) begin
                   h4.hammingDistances.finalStates[6]= h4.eTransition[1] + h3.hammingDistances.finalStates[4];
-                  h4.fTransition[1]=-1;
+                  h4.fTransition[1]=3;
                 end
                 else begin
                   h4.hammingDistances.finalStates[6]= h4.fTransition[1] + h3.hammingDistances.finalStates[5];
-                  h4.eTransition[1]=-1;
+                  h4.eTransition[1]=3;
                 end
                 stage_n = stage_n+1;
               end
@@ -277,11 +287,11 @@ module decoder(clk, reset, data, out);
                 h4.hTransition[1] = compute_hamming_distance(data[7],data[6],low,high);
                 if ((h4.gTransition[1] + h3.hammingDistances.finalStates[6])<(h4.hTransition[1] + h3.hammingDistances.finalStates[7])) begin
                   h4.hammingDistances.finalStates[7]= h4.gTransition[1] + h3.hammingDistances.finalStates[6];
-                  h4.hTransition[1]=-1;
+                  h4.hTransition[1]=3;
                 end
                 else begin
                   h4.hammingDistances.finalStates[7]= h4.hTransition[1] + h3.hammingDistances.finalStates[7];
-                  h4.gTransition[1]=-1;
+                  h4.gTransition[1]=3;
                 end
                 stage_n = 0;
                 steps_n = steps_n+1;
@@ -294,11 +304,11 @@ module decoder(clk, reset, data, out);
                 h5.bTransition[0] = compute_hamming_distance(data[5],data[4],high,high);
                 if ((h5.aTransition[0] + h4.hammingDistances.finalStates[0])<(h5.bTransition[0] + h4.hammingDistances.finalStates[1])) begin
                   h5.hammingDistances.finalStates[0]= h5.aTransition[0] + h4.hammingDistances.finalStates[0];
-                  h5.bTransition[0]=-1;
+                  h5.bTransition[0]=3;
                 end
                 else begin
                   h5.hammingDistances.finalStates[0]= h5.bTransition[0] + h4.hammingDistances.finalStates[1];
-                  h5.aTransition[0] = -1;
+                  h5.aTransition[0] = 3;
                 end
               stage_n = stage_n+1;
             end
@@ -308,11 +318,11 @@ module decoder(clk, reset, data, out);
               h5.dTransition[0] = compute_hamming_distance(data[5],data[4],low,high);
               if ((h5.cTransition[0] + h4.hammingDistances.finalStates[2])<(h5.dTransition[0] + h4.hammingDistances.finalStates[3])) begin
                 h5.hammingDistances.finalStates[1]= h5.cTransition[0] + h4.hammingDistances.finalStates[2];
-                h5.dTransition[0]=-1;
+                h5.dTransition[0]=3;
               end
               else begin
                 h5.hammingDistances.finalStates[1]= h5.dTransition[0] + h4.hammingDistances.finalStates[3];
-                h5.cTransition[0] = -1;
+                h5.cTransition[0] = 3;
               end
               stage_n = stage_n+1;
             end
@@ -322,11 +332,11 @@ module decoder(clk, reset, data, out);
               h5.fTransition[0] = compute_hamming_distance(data[5],data[4],low,low);
               if ((h5.eTransition[0] + h4.hammingDistances.finalStates[4])<(h5.fTransition[0] + h4.hammingDistances.finalStates[5])) begin
                 h5.hammingDistances.finalStates[2]= h5.eTransition[0] + h4.hammingDistances.finalStates[4];
-                h5.fTransition[0]=-1;
+                h5.fTransition[0]=3;
               end
               else begin
                 h5.hammingDistances.finalStates[2]= h5.fTransition[0] + h4.hammingDistances.finalStates[5];
-                h5.eTransition[0]=-1;
+                h5.eTransition[0]=3;
               end
               stage_n = stage_n+1;
             end
@@ -336,11 +346,11 @@ module decoder(clk, reset, data, out);
               h5.hTransition[0] = compute_hamming_distance(data[5],data[4],high,low);
               if ((h5.gTransition[0] + h4.hammingDistances.finalStates[6])<(h5.hTransition[0] + h4.hammingDistances.finalStates[7])) begin
                 h5.hammingDistances.finalStates[3]= h5.gTransition[0] + h4.hammingDistances.finalStates[6];
-                h5.hTransition[0]=-1;
+                h5.hTransition[0]=3;
               end
               else begin
                 h5.hammingDistances.finalStates[3]= h5.hTransition[0] + h4.hammingDistances.finalStates[7];
-                h5.gTransition[0]=-1;
+                h5.gTransition[0]=3;
               end
               stage_n = stage_n+1;
             end
@@ -350,11 +360,11 @@ module decoder(clk, reset, data, out);
               h5.bTransition[1] = compute_hamming_distance(data[5],data[4],low,low);
               if ((h5.aTransition[1] + h4.hammingDistances.finalStates[0])<(h5.bTransition[1] + h4.hammingDistances.finalStates[1])) begin
                 h5.hammingDistances.finalStates[4]= h5.aTransition[1] + h4.hammingDistances.finalStates[0];
-                h5.bTransition[1]=-1;
+                h5.bTransition[1]=3;
               end
               else begin
                 h5.hammingDistances.finalStates[4]= h5.bTransition[1] + h4.hammingDistances.finalStates[1];
-                h5.aTransition[1] = -1;
+                h5.aTransition[1] = 3;
               end
               stage_n = stage_n+1;
             end
@@ -364,11 +374,11 @@ module decoder(clk, reset, data, out);
               h5.dTransition[1] = compute_hamming_distance(data[5],data[4],high,low);
               if ((h5.cTransition[1] + h4.hammingDistances.finalStates[2])<(h5.dTransition[1] + h4.hammingDistances.finalStates[3])) begin
                 h5.hammingDistances.finalStates[5]= h5.cTransition[1] + h4.hammingDistances.finalStates[2];
-                h5.dTransition[1]=-1;
+                h5.dTransition[1]=3;
               end
               else begin
                 h5.hammingDistances.finalStates[5]= h5.dTransition[1] + h4.hammingDistances.finalStates[3];
-                h5.cTransition[1] = -1;
+                h5.cTransition[1] = 3;
               end
               stage_n = stage_n+1;
             end
@@ -378,11 +388,11 @@ module decoder(clk, reset, data, out);
               h5.fTransition[1] = compute_hamming_distance(data[5],data[4],high,high);
               if ((h5.eTransition[1] + h4.hammingDistances.finalStates[4])<(h5.fTransition[1] + h4.hammingDistances.finalStates[5])) begin
                 h5.hammingDistances.finalStates[6]= h5.eTransition[1] + h4.hammingDistances.finalStates[4];
-                h5.fTransition[1]=-1;
+                h5.fTransition[1]=3;
               end
               else begin
                 h5.hammingDistances.finalStates[6]= h5.fTransition[1] + h4.hammingDistances.finalStates[5];
-                h5.eTransition[1]=-1;
+                h5.eTransition[1]=3;
               end
               stage_n = stage_n+1;
             end
@@ -392,11 +402,11 @@ module decoder(clk, reset, data, out);
               h5.hTransition[1] = compute_hamming_distance(data[5],data[4],low,high);
               if ((h5.gTransition[1] + h4.hammingDistances.finalStates[6])<(h5.hTransition[1] + h4.hammingDistances.finalStates[7])) begin
                 h5.hammingDistances.finalStates[7]= h5.gTransition[1] + h4.hammingDistances.finalStates[6];
-                h5.hTransition[1]=-1;
+                h5.hTransition[1]=3;
               end
               else begin
                 h5.hammingDistances.finalStates[7]= h5.hTransition[1] + h4.hammingDistances.finalStates[7];
-                h5.gTransition[1]=-1;
+                h5.gTransition[1]=3;
               end
               stage_n = 0;
               steps_n = steps_n+1;
@@ -409,11 +419,11 @@ module decoder(clk, reset, data, out);
                 h6.bTransition[0] = compute_hamming_distance(data[3],data[2],high,high);
                 if ((h6.aTransition[0] + h5.hammingDistances.finalStates[0])<(h6.bTransition[0] + h5.hammingDistances.finalStates[1])) begin
                   h6.hammingDistances.finalStates[0]= h6.aTransition[0] + h5.hammingDistances.finalStates[0];
-                  h6.bTransition[0]=-1;
+                  h6.bTransition[0]=3;
                 end
                 else begin
                   h6.hammingDistances.finalStates[0]= h6.bTransition[0] + h5.hammingDistances.finalStates[1];
-                  h6.aTransition[0]=-1;
+                  h6.aTransition[0]=3;
                 end
                 stage_n = stage_n+1;
               end
@@ -423,11 +433,11 @@ module decoder(clk, reset, data, out);
                 h6.dTransition[0] = compute_hamming_distance(data[3],data[2],low,high);
                 if ((h6.cTransition[0] + h5.hammingDistances.finalStates[2])<(h6.dTransition[0] + h5.hammingDistances.finalStates[3])) begin
                   h6.hammingDistances.finalStates[1]= h6.cTransition[0] + h5.hammingDistances.finalStates[2];
-                  h6.dTransition[0]=-1;
+                  h6.dTransition[0]=3;
                 end
                 else begin
                   h6.hammingDistances.finalStates[1]= h6.dTransition[0] + h5.hammingDistances.finalStates[3];
-                  h6.cTransition[0]=-1;
+                  h6.cTransition[0]=3;
                 end
                 stage_n = stage_n+1;
               end
@@ -437,11 +447,11 @@ module decoder(clk, reset, data, out);
                 h6.fTransition[0] = compute_hamming_distance(data[3],data[2],low,low);
                 if ((h6.eTransition[0] + h5.hammingDistances.finalStates[4])<(h6.fTransition[0] + h5.hammingDistances.finalStates[5])) begin
                   h6.hammingDistances.finalStates[2]= h6.eTransition[0] + h5.hammingDistances.finalStates[4];
-                  h6.fTransition[0]=-1;
+                  h6.fTransition[0]=3;
                 end
                 else begin
                   h6.hammingDistances.finalStates[2]= h6.fTransition[0] + h5.hammingDistances.finalStates[5];
-                  h6.eTransition[0]=-1;
+                  h6.eTransition[0]=3;
                 end 
                 stage_n = stage_n+1;
               end
@@ -451,11 +461,11 @@ module decoder(clk, reset, data, out);
                 h6.hTransition[0] = compute_hamming_distance(data[3],data[2],high,low);
                 if ((h6.gTransition[0] + h5.hammingDistances.finalStates[6])<(h6.hTransition[0] + h5.hammingDistances.finalStates[7])) begin
                   h6.hammingDistances.finalStates[3]= h6.gTransition[0] + h5.hammingDistances.finalStates[6];
-                  h6.hTransition[0]=-1;
+                  h6.hTransition[0]=3;
                 end
                 else begin
                   h6.hammingDistances.finalStates[3]= h6.hTransition[0] + h5.hammingDistances.finalStates[7];
-                  h6.gTransition[0]=-1;
+                  h6.gTransition[0]=3;
                 end
                 stage_n = stage_n+1;
               end
@@ -465,11 +475,11 @@ module decoder(clk, reset, data, out);
                 h6.bTransition[1] = compute_hamming_distance(data[3],data[2],low,low);
                 if ((h6.aTransition[1] + h5.hammingDistances.finalStates[0])<(h6.bTransition[1] + h5.hammingDistances.finalStates[1])) begin
                   h6.hammingDistances.finalStates[4]= h6.aTransition[1] + h5.hammingDistances.finalStates[0];
-                  h6.bTransition[1]=-1;
+                  h6.bTransition[1]=3;
                 end
                 else begin
                   h6.hammingDistances.finalStates[4]= h6.bTransition[1] + h5.hammingDistances.finalStates[1];
-                  h6.aTransition[1]=-1;
+                  h6.aTransition[1]=3;
                 end
                 stage_n = stage_n+1;
               end
@@ -479,11 +489,11 @@ module decoder(clk, reset, data, out);
                 h6.dTransition[1] = compute_hamming_distance(data[3],data[2],high,low);
                 if ((h6.cTransition[1] + h5.hammingDistances.finalStates[2])<(h6.dTransition[1] + h5.hammingDistances.finalStates[3])) begin
                   h6.hammingDistances.finalStates[5]= h6.cTransition[1] + h5.hammingDistances.finalStates[2];
-                  h6.dTransition[1]=-1;
+                  h6.dTransition[1]=3;
                 end
                 else begin
                   h6.hammingDistances.finalStates[5]= h6.dTransition[1] + h5.hammingDistances.finalStates[3];
-                  h6.cTransition[1]=-1;
+                  h6.cTransition[1]=3;
                 end
                 stage_n = stage_n+1;
               end
@@ -493,11 +503,11 @@ module decoder(clk, reset, data, out);
                 h6.fTransition[1] = compute_hamming_distance(data[3],data[2],high,high);
                 if ((h6.eTransition[1] + h5.hammingDistances.finalStates[4])<(h6.fTransition[1] + h5.hammingDistances.finalStates[5])) begin
                   h6.hammingDistances.finalStates[6]= h6.eTransition[1] + h5.hammingDistances.finalStates[4];
-                  h6.fTransition[1]=-1;
+                  h6.fTransition[1]=3;
                 end
                 else begin
                   h6.hammingDistances.finalStates[6]= h6.fTransition[1] + h5.hammingDistances.finalStates[5];
-                  h6.eTransition[1]=-1;
+                  h6.eTransition[1]=3;
                 end
                 stage_n = stage_n+1;
               end
@@ -507,11 +517,11 @@ module decoder(clk, reset, data, out);
                 h6.hTransition[1] = compute_hamming_distance(data[3],data[2],low,high);
                 if ((h6.gTransition[1] + h5.hammingDistances.finalStates[6])<(h6.hTransition[1] + h5.hammingDistances.finalStates[7])) begin
                   h6.hammingDistances.finalStates[7]= h6.gTransition[1] + h5.hammingDistances.finalStates[6];
-                  h6.hTransition[1]=-1;
+                  h6.hTransition[1]=3;
                 end
                 else begin
                   h6.hammingDistances.finalStates[7]= h6.hTransition[1] + h5.hammingDistances.finalStates[7];
-                  h6.gTransition[1]=-1;
+                  h6.gTransition[1]=3;
                 end
                 stage_n = 0;
                 steps_n = steps_n+1;
@@ -524,11 +534,11 @@ module decoder(clk, reset, data, out);
                 h7.bTransition[0] = compute_hamming_distance(data[1],data[0],high,high);
                 if ((h7.aTransition[0] + h6.hammingDistances.finalStates[0])<(h7.bTransition[0] + h6.hammingDistances.finalStates[1])) begin
                   h7.hammingDistances.finalStates[0]= h7.aTransition[0] + h6.hammingDistances.finalStates[0];
-                  h7.bTransition[0]=-1;
+                  h7.bTransition[0]=3;
                 end
                 else begin
                   h7.hammingDistances.finalStates[0]= h7.bTransition[0] + h6.hammingDistances.finalStates[1];
-                  h7.aTransition[0]=-1;
+                  h7.aTransition[0]=3;
                 end
                 stage_n = stage_n+1;
               end
@@ -538,11 +548,11 @@ module decoder(clk, reset, data, out);
                 h7.dTransition[0] = compute_hamming_distance(data[1],data[0],low,high);
                 if ((h7.cTransition[0] + h6.hammingDistances.finalStates[2])<(h7.dTransition[0] + h6.hammingDistances.finalStates[3])) begin
                   h7.hammingDistances.finalStates[1]= h7.cTransition[0] + h6.hammingDistances.finalStates[2];
-                  h7.dTransition[0]=-1;
+                  h7.dTransition[0]=3;
                 end
                 else begin
                   h7.hammingDistances.finalStates[1]= h7.dTransition[0] + h6.hammingDistances.finalStates[3];
-                  h7.cTransition[0]=-1;
+                  h7.cTransition[0]=3;
                 end
                 stage_n = stage_n+1;
               end
@@ -552,11 +562,11 @@ module decoder(clk, reset, data, out);
                 h7.fTransition[0] = compute_hamming_distance(data[1],data[0],low,low);
                 if ((h7.eTransition[0] + h6.hammingDistances.finalStates[4])<(h7.fTransition[0] + h6.hammingDistances.finalStates[5])) begin
                   h7.hammingDistances.finalStates[2]= h7.eTransition[0] + h6.hammingDistances.finalStates[4];
-                  h7.fTransition[0]=-1;
+                  h7.fTransition[0]=3;
                 end
                 else begin
                   h7.hammingDistances.finalStates[2]= h7.fTransition[0] + h6.hammingDistances.finalStates[5];
-                  h7.eTransition[0]=-1;
+                  h7.eTransition[0]=3;
                 end
                 stage_n = stage_n+1;
               end
@@ -566,11 +576,11 @@ module decoder(clk, reset, data, out);
                 h7.hTransition[0] = compute_hamming_distance(data[1],data[0],high,low);
                 if ((h7.gTransition[0] + h6.hammingDistances.finalStates[6])<(h7.hTransition[0] + h6.hammingDistances.finalStates[7])) begin
                   h7.hammingDistances.finalStates[3]= h7.gTransition[0] + h6.hammingDistances.finalStates[6];
-                  h7.hTransition[0]=-1;
+                  h7.hTransition[0]=3;
                 end
                 else begin
                   h7.hammingDistances.finalStates[3]= h7.hTransition[0] + h6.hammingDistances.finalStates[7];
-                  h7.gTransition[0]=-1;
+                  h7.gTransition[0]=3;
                 end
                 stage_n = stage_n+1;
               end
@@ -580,11 +590,11 @@ module decoder(clk, reset, data, out);
                 h7.bTransition[1] = compute_hamming_distance(data[1],data[0],low,low);
                 if ((h7.aTransition[1] + h6.hammingDistances.finalStates[0])<(h7.bTransition[1] + h6.hammingDistances.finalStates[1])) begin
                   h7.hammingDistances.finalStates[4]= h7.aTransition[1] + h6.hammingDistances.finalStates[0];
-                  h7.bTransition[1]=-1;
+                  h7.bTransition[1]=3;
                 end
                 else begin
                   h7.hammingDistances.finalStates[4]= h7.bTransition[1] + h6.hammingDistances.finalStates[1];
-                  h7.aTransition[1]=-1;
+                  h7.aTransition[1]=3;
                 end
                 stage_n = stage_n+1;
               end
@@ -594,11 +604,11 @@ module decoder(clk, reset, data, out);
                 h7.dTransition[1] = compute_hamming_distance(data[1],data[0],high,low);
                 if ((h7.cTransition[1] + h6.hammingDistances.finalStates[2])<(h7.dTransition[1] + h6.hammingDistances.finalStates[3])) begin
                   h7.hammingDistances.finalStates[5]= h7.cTransition[1] + h6.hammingDistances.finalStates[2];
-                  h7.dTransition[1]=-1;
+                  h7.dTransition[1]=3;
                 end
                 else begin
                   h7.hammingDistances.finalStates[5]= h7.dTransition[1] + h6.hammingDistances.finalStates[3];
-                  h7.cTransition[1]=-1;
+                  h7.cTransition[1]=3;
                 end
                 stage_n = stage_n+1;
               end
@@ -608,11 +618,11 @@ module decoder(clk, reset, data, out);
                 h7.fTransition[1] = compute_hamming_distance(data[1],data[0],high,high);
                 if ((h7.eTransition[1] + h6.hammingDistances.finalStates[4])<(h7.fTransition[1] + h6.hammingDistances.finalStates[5])) begin
                   h7.hammingDistances.finalStates[6]= h7.eTransition[1] + h6.hammingDistances.finalStates[4];
-                  h7.fTransition[1]=-1;
+                  h7.fTransition[1]=3;
                 end
                 else begin
                   h7.hammingDistances.finalStates[6]= h7.fTransition[1] + h6.hammingDistances.finalStates[5];
-                  h7.eTransition[1]=-1;
+                  h7.eTransition[1]=3;
                 end
                 stage_n = stage_n+1;
               end
@@ -622,21 +632,48 @@ module decoder(clk, reset, data, out);
                 h7.hTransition[1] = compute_hamming_distance(data[1],data[0],low,high);
                 if ((h7.gTransition[1] + h6.hammingDistances.finalStates[6])<(h7.hTransition[1] + h6.hammingDistances.finalStates[7])) begin
                   h7.hammingDistances.finalStates[7]= h7.gTransition[1] + h6.hammingDistances.finalStates[6];
-                  h7.hTransition[1]=-1;
+                  h7.hTransition[1]=3;
                 end
                 else begin
                   h7.hammingDistances.finalStates[7]= h7.hTransition[1] + h6.hammingDistances.finalStates[7];
-                  h7.gTransition[1]=-1;
+                  h7.gTransition[1]=3;
                 end
                 stage_n = 0;
                 steps_n = steps_n+1;
               end
             end //end of step 7
+            
         end
 
   end
 
-
+  always @(posedge ready && clk) begin
+    
+              if (counter_for_path==0) begin
+                for (int j =0;j<8;j=j+1) begin
+                  temp_states[j] = h7.hammingDistances.finalStates[j];
+                end
+                lowest_value = temp_states[0];
+                lowest_index = 0;
+                  for (int l = 0; l<8; l=l+1) begin
+                    //find lowest value in temp_states by comparing with h7.hammingDistances.finalStates and store in lowest_value
+                    if (temp_states[l]<lowest_value ) begin
+                      lowest_value = temp_states[l];
+                      lowest_index = l;
+                    end
+                  end
+                  counter_for_path = counter_for_path+1;
+              end //end of counter_for_path==0
+              else if(counter_for_path>=1 && counter_for_path<=7) begin
+                returned_path = getReturnPath(lowest_index, table_counter);
+                set_outputs(lowest_index, returned_path, pinOut);
+                lowest_index = returned_path;
+                table_counter = table_counter-1;
+                pinOut=pinOut+1;
+                counter_for_path = counter_for_path+1;
+              end
+              
+  end //end of always
 
 
   task initialize_hamming_table(input int steps, input bit bits0, input bit bits1);
@@ -702,12 +739,559 @@ module decoder(clk, reset, data, out);
         end
     end
   endfunction
+  
+  function bit[2:0] getReturnPath(input bit [2:0] currentState, input bit [3:0] currentTable);
+     begin
+      bit[2:0] returnPath;
+        if (currentTable==7) begin
+          case(currentState)
+            0: begin
+              if (h7.aTransition[0]!=3) begin
+                returnPath = 0;
+              end
+              else begin
+                returnPath = 1;
+              end
+            end
+            1: begin
+              if (h7.cTransition[0]!=3) begin
+                returnPath = 2;
+              end
+              else begin
+                returnPath = 3;
+              end
+            end
+            2: begin
+              if (h7.eTransition[0]!=3) begin
+                returnPath = 4;
+              end
+              else begin
+                returnPath = 5;
+              end
+            end
+            3: begin
+              if (h7.gTransition[0]!=3) begin
+                returnPath = 6;
+              end
+              else begin
+                returnPath = 7;
+              end
+            end
+            4: begin
+              if (h7.aTransition[1]!=3) begin
+                returnPath = 0;
+              end
+              else begin
+                returnPath = 1;
+              end
+            end
+            5: begin
+              if (h7.cTransition[1]!=3) begin
+                returnPath = 2;
+              end
+              else begin
+                returnPath =3;
+              end
+            end
+            6: begin
+              if (h7.eTransition[1]!=3) begin
+                returnPath = 4;
+              end
+              else begin
+                returnPath = 5;
+              end
+            end
+            7: begin
+              if (h7.gTransition[1]!=3) begin
+                returnPath = 6;
+              end
+              else begin
+                returnPath = 7;
+              end
+            end
+            default: returnPath= 7;       
+          endcase
+          return returnPath;
+        end //end of if currentTable
+        if (currentTable==6) begin
+          case(currentState)
+            0: begin
+              if (h6.aTransition[0]!=3) begin
+                returnPath = 0;
+              end
+              else begin
+                returnPath = 1;
+              end
+            end
+            1: begin
+              if (h6.cTransition[0]!=3) begin
+                returnPath = 2;
+              end
+              else begin
+                returnPath = 3;
+              end
+            end
+            2: begin
+              if (h6.eTransition[0]!=3) begin
+                returnPath = 4;
+              end
+              else begin
+                returnPath = 5;
+              end
+            end
+            3: begin
+              if (h6.gTransition[0]!=3) begin
+                returnPath = 6;
+              end
+              else begin
+                returnPath = 7;
+              end
+            end
+            4: begin
+              if (h6.aTransition[1]!=3) begin
+                returnPath = 0;
+              end
+              else begin
+                returnPath = 1;
+              end
+            end
+            5: begin
+              if (h6.cTransition[1]!=3) begin
+                returnPath = 2;
+              end
+              else begin
+                returnPath = 3;
+              end
+            end
+            6: begin
+              if (h6.eTransition[1]!=3) begin
+                returnPath = 4;
+              end
+              else begin
+                returnPath = 5;
+              end
+            end
+            7: begin
+              if (h6.gTransition[1]!=3) begin
+                returnPath = 6;
+              end
+              else begin
+                returnPath = 7;
+              end
+            end            
+          endcase
+          return returnPath;
+        end //end of if currentTable
+        if (currentTable==5) begin
+          case(currentState)
+            0: begin
+              if (h5.aTransition[0]!=3) begin
+                returnPath = 0;
+              end
+              else begin
+                returnPath = 1;
+              end
+            end
+            1: begin
+              if (h5.cTransition[0]!=3) begin
+                returnPath = 2;
+              end
+              else begin
+                returnPath = 3;
+              end
+            end
+            2: begin
+              if (h5.eTransition[0]!=3) begin
+                returnPath = 4;
+              end
+              else begin
+                returnPath = 5;
+              end
+            end
+            3: begin
+              if (h5.gTransition[0]!=3) begin
+                returnPath = 6;
+              end
+              else begin
+                returnPath = 7;
+              end
+            end
+            4: begin
+              if (h5.aTransition[1]!=3) begin
+                returnPath = 0;
+              end
+              else begin
+                returnPath = 1;
+              end
+            end
+            5: begin
+              if (h5.cTransition[1]!=3) begin
+                returnPath = 2;
+              end
+              else begin
+                returnPath = 3;
+              end
+            end
+            6: begin
+              if (h5.eTransition[1]!=3) begin
+                returnPath = 4;
+              end
+              else begin
+                returnPath = 5;
+              end
+            end
+            7: begin
+              if (h5.gTransition[1]!=3) begin
+                returnPath = 6;
+              end
+              else begin
+                returnPath = 7;
+              end
+            end
+          endcase
+          return returnPath;
+        end //end of if currentTable
+        if (currentTable==4) begin
+          case(currentState)
+            0: begin
+              if (h4.aTransition[0]!=3) begin
+                returnPath = 0;
+              end
+              else begin
+                returnPath = 1;
+              end
+            end
+            1: begin
+              if (h4.cTransition[0]!=3) begin
+                returnPath = 2;
+              end
+              else begin
+                returnPath = 3;
+              end
+            end
+            2: begin
+              if (h4.eTransition[0]!=3) begin
+                returnPath = 4;
+              end
+              else begin
+                returnPath = 5;
+              end
+            end
+            3: begin
+              if (h4.gTransition[0]!=3) begin
+                returnPath = 6;
+              end
+              else begin
+                returnPath = 7;
+              end
+            end
+            4: begin
+              if (h4.aTransition[1]!=3) begin
+                returnPath = 0;
+              end
+              else begin
+                returnPath = 1;
+              end
+            end
+            5: begin
+              if (h4.cTransition[1]!=3) begin
+                returnPath = 2;
+              end
+              else begin
+                returnPath = 3;
+              end
+            end
+            6: begin
+              if (h4.eTransition[1]!=3) begin
+                returnPath = 4;
+              end
+              else begin
+                returnPath = 5;
+              end
+            end
+            7: begin
+              if (h4.gTransition[1]!=3) begin
+                returnPath = 6;
+              end
+              else begin
+                returnPath = 7;
+              end
+            end
+          endcase
+          return returnPath;
+        end //end of if currentTable
+        if (currentTable==3) begin
+          case(currentState)
+            0: begin
+              if (h3.aTransition[0]!=3) begin
+                returnPath = 0;
+              end
+              else begin
+                returnPath = 1;
+              end
+            end
+            1: begin
+              if (h3.cTransition[0]!=3) begin
+                returnPath = 2;
+              end
+              else begin
+                returnPath = 3;
+              end
+            end
+            2: begin
+              if (h3.eTransition[0]!=3) begin
+                returnPath = 4;
+              end
+              else begin
+                returnPath = 5;
+              end
+            end
+            3: begin
+              if (h3.gTransition[0]!=3) begin
+                returnPath = 6;
+              end
+              else begin
+                returnPath = 7;
+              end
+            end
+            4: begin
+              if (h3.aTransition[1]!=3) begin
+                returnPath = 0;
+              end
+              else begin
+                returnPath = 1;
+              end
+            end
+            5: begin
+              if (h3.cTransition[1]!=3) begin
+                returnPath = 2;
+              end
+              else begin
+                returnPath = 3;
+              end
+            end
+            6: begin
+              if (h3.eTransition[1]!=3) begin
+                returnPath = 4;
+              end
+              else begin
+                returnPath = 5;
+              end
+            end
+            7: begin
+              if (h3.gTransition[1]!=3) begin
+                returnPath = 6;
+              end
+              else begin
+                returnPath = 7;
+              end
+            end
+          endcase
+          return returnPath;
+        end //end of if currentTable
+        if (currentTable==2) begin
+          case(currentState)
+            0: begin
+              if (h2.aTransition[0]!=3) begin
+                returnPath = 0;
+              end
+              else begin
+                returnPath = 1;
+              end
+            end
+            1: begin
+              if (h2.cTransition[0]!=3) begin
+                returnPath = 2;
+              end
+              else begin
+                returnPath = 3;
+              end
+            end
+            2: begin
+              if (h2.eTransition[0]!=3) begin
+                returnPath = 4;
+              end
+              else begin
+                returnPath = 5;
+              end
+            end
+            3: begin
+              if (h2.gTransition[0]!=3) begin
+                returnPath = 6;
+              end
+              else begin
+                returnPath = 7;
+              end
+            end
+            4: begin
+              if (h2.aTransition[1]!=3) begin
+                returnPath = 0;
+              end
+              else begin
+                returnPath = 1;
+              end
+            end
+            5: begin
+              if (h2.cTransition[1]!=3) begin
+                returnPath = 2;
+              end
+              else begin
+                returnPath = 3;
+              end
+            end
+            6: begin
+              if (h2.eTransition[1]!=3) begin
+                returnPath = 4;
+              end
+              else begin
+                returnPath = 5;
+              end
+            end
+            7: begin
+              if (h2.gTransition[1]!=3) begin
+                returnPath = 6;
+              end
+              else begin
+                returnPath = 7;
+              end
+            end
+          endcase
+          return returnPath;
+        end //end of if currentTable
+        if (currentTable==1) begin
+          case(currentState)
+            0: begin
+              if (h1.aTransition[0]!=3) begin
+                returnPath = 0;
+              end
+              else begin
+                returnPath = 1;
+              end
+            end
+            1: begin
+              if (h1.cTransition[0]!=3) begin
+                returnPath = 2;
+              end
+              else begin
+                returnPath = 3;
+              end
+            end
+            2: begin
+              if (h1.eTransition[0]!=3) begin
+                returnPath = 4;
+              end
+              else begin
+                returnPath = 5;
+              end
+            end
+            3: begin
+              if (h1.gTransition[0]!=3) begin
+                returnPath = 6;
+              end
+              else begin
+                returnPath = 7;
+              end
+            end
+            4: begin
+              if (h1.aTransition[1]!=3) begin
+                returnPath = 0;
+              end
+              else begin
+                returnPath = 1;
+              end
+            end
+            5: begin
+              if (h1.cTransition[1]!=3) begin
+                returnPath = 2;
+              end
+              else begin
+                returnPath = 3;
+              end
+            end
+            6: begin
+              if (h1.eTransition[1]!=3) begin
+                returnPath = 4;
+              end
+              else begin
+                returnPath = 5;
+              end
+            end
+            7: begin
+              if (h1.gTransition[1]!=3) begin
+                returnPath = 6;
+              end
+              else begin
+                returnPath = 7;
+              end
+            end
+          endcase
+          return returnPath;
+        end //end of if currentTable
+     end//
+  endfunction 
+  task set_outputs(input bit[3:0] from_s, input bit[3:0] at_state,input byte pinNumber); // last to first
+     begin //task begin
+      if (from_s==0 && at_state==0) begin
+        out[pinNumber] = 0;
+      end
+      else if(from_s==0 && at_state==1 ) begin
+        out[pinNumber] = 1;
+      end
+      else if(from_s==1 && at_state==2 ) begin
+        out[pinNumber] = 0;
+      end
+      else if(from_s==1 && at_state==3 ) begin
+        out[pinNumber] = 0;
+      end
+      else if(from_s==2 && at_state==4 ) begin
+        out[pinNumber] = 0;
+      end
+      else if(from_s==2 && at_state==5 ) begin
+        out[pinNumber] = 0;
+      end
+      else if(from_s==3 && at_state==6 ) begin
+        out[pinNumber] = 0;
+      end
+      else if(from_s==3 && at_state==7 ) begin
+        out[pinNumber] = 0;
+      end
+      else if(from_s==4 && at_state==0 ) begin
+        out[pinNumber] = 1;
+      end
+      else if(from_s==4 && at_state==1 ) begin
+        out[pinNumber] = 1;
+      end
+      else if(from_s==5 && at_state==2 ) begin
+        out[pinNumber] = 1;
+      end
+      else if(from_s==5 && at_state==3 ) begin
+        out[pinNumber] = 1;
+      end
+      else if(from_s==6 && at_state==4 ) begin
+        out[pinNumber] = 1;
+      end
+      else if(from_s==6 && at_state==5 ) begin
+        out[pinNumber] = 1;
+      end
+      else if(from_s==7 && at_state==6 ) begin
+        out[pinNumber] = 1;
+      end
+      else if(from_s==7 && at_state==7 ) begin
+        out[pinNumber] = 1;
+      end
+     end // task end
+  endtask
 
+
+  
+
+
+  /*
   function bit toggle(input bit tog);
 	begin
   	tog=~tog;
 	end
 	return tog;
-  endfunction
+  endfunction*/
   
 endmodule
