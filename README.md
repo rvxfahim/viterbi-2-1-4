@@ -9,3 +9,6 @@
 
 ## Decoder Waveform
 ![image](https://user-images.githubusercontent.com/32749520/175324524-28ed44d7-bcb0-4781-a5fd-8742c56e7d2c.png)
+
+## Decoder Waveform with error transmission
+![image](https://user-images.githubusercontent.com/32749520/175324906-e43eefe7-d2c2-41f2-a2bb-2fadd29ff969.png)
