@@ -48,7 +48,7 @@ module decoder(clk, reset, dat, out, ready);
  } HammingTable;
   HammingTable h1, h2, h3, h4, h5, h6, h7;
   FinalHammingDistance oldHam;
-  always @ (posedge clk) begin
+  always @ (posedge clk ) begin
 
 	      if(!reset) begin
 	      	//initialize all memory variables/registers

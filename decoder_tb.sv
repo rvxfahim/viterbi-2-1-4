@@ -12,16 +12,16 @@ initial begin
 	clk<=~clk;
 	reset<=0;
 	
-	#2 clk<=~clk;
-	#1 reset<=1;
-        #1 clk<=~clk;
+	#100 clk<=~clk;
+	#50 reset<=1;
+        #50 clk<=~clk;
 	repeat(100) begin
-	#2 clk<=~clk;
+	#100 clk<=~clk;
 	end
 	ready<=1;
-	#2 clk<=~clk;
+	#100 clk<=~clk;
 	repeat(40) begin
-	#2 clk<=~clk;
+	#100 clk<=~clk;
 	end
    end
 
