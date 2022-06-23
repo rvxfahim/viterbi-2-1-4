@@ -1,13 +1,14 @@
-module decoder(clk, reset, data, out, ready);
+module decoder(clk, reset, dat, out, ready);
  
   input clk;
   input reset;
-  input [13:0] data;
+  input [13:0] dat;
   input ready;
   output reg [6:0] out;
+  reg [13:0] data;
   logic high;
   logic low;
-  wire [13:0]data;
+  //wire [13:0]data;
   assign high = 1;
   assign low = 0;
   logic toggle_flag;
@@ -20,11 +21,11 @@ module decoder(clk, reset, data, out, ready);
   byte counter_for_path;
   byte pinOut;
   byte table_counter;
-  typedef struct{
+  typedef struct {
 	logic [4:0]finalStates[0:7];
 } FinalHammingDistance;
 
-  typedef struct{
+  typedef struct {
     logic bits[0:1];
     logic decoded;
 } CorrectSequence;
@@ -47,7 +48,7 @@ module decoder(clk, reset, data, out, ready);
  } HammingTable;
   HammingTable h1, h2, h3, h4, h5, h6, h7;
   FinalHammingDistance oldHam;
-  always @ (posedge clk or negedge reset) begin
+  always @ (posedge clk) begin
 
 	      if(!reset) begin
 	      	//initialize all memory variables/registers
@@ -79,8 +80,15 @@ module decoder(clk, reset, data, out, ready);
           for (i = 0;i<8 ;i=i+1 ) begin
             h7.hammingDistances.finalStates[i] = 0;
           end
+	        data = dat;
           pinOut = 0;
-          
+          out[0] = 0;
+          out[1] = 0;
+          out[2] = 0;
+          out[3] = 0;
+          out[4] = 0;
+          out[5] = 0;
+          out[6] = 0;
           steps_n = 1;
           stage_n=0;
           table_counter = 7;
@@ -644,36 +652,60 @@ module decoder(clk, reset, data, out, ready);
             end //end of step 7
             
         end
-
-  end
-
-  always @(posedge ready && clk) begin
-    
-              if (counter_for_path==0) begin
-                for (int j =0;j<8;j=j+1) begin
-                  temp_states[j] = h7.hammingDistances.finalStates[j];
-                end
-                lowest_value = temp_states[0];
-                lowest_index = 0;
-                  for (int l = 0; l<8; l=l+1) begin
-                    //find lowest value in temp_states by comparing with h7.hammingDistances.finalStates and store in lowest_value
-                    if (temp_states[l]<lowest_value ) begin
-                      lowest_value = temp_states[l];
-                      lowest_index = l;
-                    end
+                if(ready==1) begin
+                              if (counter_for_path==0) begin
+                                for (int j =0;j<8;j=j+1) begin
+                                  temp_states[j] = h7.hammingDistances.finalStates[j];
+                                end
+                                lowest_value = temp_states[0];
+                                lowest_index = 0;
+                                  for (int l = 0; l<8; l=l+1) begin
+                                    //find lowest value in temp_states by comparing with h7.hammingDistances.finalStates and store in lowest_value
+                                    if (temp_states[l]<lowest_value ) begin
+                                      lowest_value = temp_states[l];
+                                      lowest_index = l;
+                                    end
+                                  end
+                                  counter_for_path = counter_for_path+1;
+                              end //end of counter_for_path==0
+                              else if(counter_for_path>=1 && counter_for_path<=7) begin
+                                returned_path = getReturnPath(lowest_index, table_counter);
+                                set_outputs(lowest_index, returned_path, pinOut);
+                                lowest_index = returned_path;
+                                table_counter = table_counter-1;
+                                pinOut=pinOut+1;
+                                counter_for_path = counter_for_path+1;
+                              end
+                          end
                   end
-                  counter_for_path = counter_for_path+1;
-              end //end of counter_for_path==0
-              else if(counter_for_path>=1 && counter_for_path<=7) begin
-                returned_path = getReturnPath(lowest_index, table_counter);
-                set_outputs(lowest_index, returned_path, pinOut);
-                lowest_index = returned_path;
-                table_counter = table_counter-1;
-                pinOut=pinOut+1;
-                counter_for_path = counter_for_path+1;
-              end
-              
-  end //end of always
+
+  // always @(posedge clk) begin
+  //         if(ready==1) begin
+  //             if (counter_for_path==0) begin
+  //               for (int j =0;j<8;j=j+1) begin
+  //                 temp_states[j] = h7.hammingDistances.finalStates[j];
+  //               end
+  //               lowest_value = temp_states[0];
+  //               lowest_index = 0;
+  //                 for (int l = 0; l<8; l=l+1) begin
+  //                   //find lowest value in temp_states by comparing with h7.hammingDistances.finalStates and store in lowest_value
+  //                   if (temp_states[l]<lowest_value ) begin
+  //                     lowest_value = temp_states[l];
+  //                     lowest_index = l;
+  //                   end
+  //                 end
+  //                 counter_for_path = counter_for_path+1;
+  //             end //end of counter_for_path==0
+  //             else if(counter_for_path>=1 && counter_for_path<=7) begin
+  //               returned_path = getReturnPath(lowest_index, table_counter);
+  //               set_outputs(lowest_index, returned_path, pinOut);
+  //               lowest_index = returned_path;
+  //               table_counter = table_counter-1;
+  //               pinOut=pinOut+1;
+  //               counter_for_path = counter_for_path+1;
+  //             end
+  //         end
+  // end //end of always
 
 
   task initialize_hamming_table(input int steps, input bit bits0, input bit bits1);
@@ -1232,66 +1264,54 @@ module decoder(clk, reset, data, out, ready);
   task set_outputs(input bit[3:0] from_s, input bit[3:0] at_state,input byte pinNumber); // last to first
      begin //task begin
       if (from_s==0 && at_state==0) begin
-        out[pinNumber] = 0;
+         out[pinNumber] = 0;
       end
       else if(from_s==0 && at_state==1 ) begin
-        out[pinNumber] = 1;
+         out[pinNumber] = 0;
       end
       else if(from_s==1 && at_state==2 ) begin
-        out[pinNumber] = 0;
+         out[pinNumber] = 0;
       end
       else if(from_s==1 && at_state==3 ) begin
-        out[pinNumber] = 0;
+         out[pinNumber] = 0;
       end
       else if(from_s==2 && at_state==4 ) begin
-        out[pinNumber] = 0;
+         out[pinNumber] = 0;
       end
       else if(from_s==2 && at_state==5 ) begin
-        out[pinNumber] = 0;
+         out[pinNumber] = 0;
       end
       else if(from_s==3 && at_state==6 ) begin
-        out[pinNumber] = 0;
+         out[pinNumber] = 0;
       end
       else if(from_s==3 && at_state==7 ) begin
-        out[pinNumber] = 0;
+         out[pinNumber] = 0;
       end
       else if(from_s==4 && at_state==0 ) begin
-        out[pinNumber] = 1;
+         out[pinNumber] = 1;
       end
       else if(from_s==4 && at_state==1 ) begin
-        out[pinNumber] = 1;
+         out[pinNumber] = 1;
       end
       else if(from_s==5 && at_state==2 ) begin
-        out[pinNumber] = 1;
+         out[pinNumber] = 1;
       end
       else if(from_s==5 && at_state==3 ) begin
-        out[pinNumber] = 1;
+         out[pinNumber] = 1;
       end
       else if(from_s==6 && at_state==4 ) begin
-        out[pinNumber] = 1;
+         out[pinNumber] = 1;
       end
       else if(from_s==6 && at_state==5 ) begin
-        out[pinNumber] = 1;
+         out[pinNumber] = 1;
       end
       else if(from_s==7 && at_state==6 ) begin
-        out[pinNumber] = 1;
+         out[pinNumber] = 1;
       end
       else if(from_s==7 && at_state==7 ) begin
-        out[pinNumber] = 1;
+         out[pinNumber] = 1;
       end
      end // task end
   endtask
 
-
-  
-
-
-  /*
-  function bit toggle(input bit tog);
-	begin
-  	tog=~tog;
-	end
-	return tog;
-  endfunction*/
-  
 endmodule
