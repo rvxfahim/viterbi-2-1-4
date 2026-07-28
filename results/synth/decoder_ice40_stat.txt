@@ -1,0 +1,21 @@
+
+5. Printing statistics.
+
+=== decoder ===
+
+        +----------Local Count, excluding submodules.
+        | 
+     1656 wires
+     4072 wire bits
+     1656 public wires
+     4072 public wire bits
+        5 ports
+       24 port bits
+     2495 cells
+      527   SB_CARRY
+      297   SB_DFF
+       22   SB_DFFE
+      199   SB_DFFESR
+        1   SB_DFFESS
+     1449   SB_LUT4
+

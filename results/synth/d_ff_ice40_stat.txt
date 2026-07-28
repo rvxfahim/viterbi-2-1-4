@@ -1,0 +1,17 @@
+
+6. Printing statistics.
+
+=== d_ff ===
+
+        +----------Local Count, excluding submodules.
+        | 
+       12 wires
+       18 wire bits
+       12 public wires
+       18 public wire bits
+        5 ports
+        9 port bits
+       13 cells
+        6   SB_DFF
+        7   SB_LUT4
+

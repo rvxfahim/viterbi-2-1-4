@@ -479,7 +479,9 @@ CorrectSequence getSequence(int stateA, int stateB) {
     return bitSequence;
 }
 
-void main() {
+// `void main()` is an MSVC extension and is rejected by g++/clang; the only
+// change made to this file during the open-source port.
+int main() {
     auto start = high_resolution_clock::now();
     cout << "hello" << endl;
     int bits[2] = { 1, 1 };
