@@ -230,6 +230,46 @@ def decode_soft(llrs: list[float]) -> list[int]:
     return bits
 
 
+# ---------------------------------------------------------------------------
+# Zero-tail terminated variant  (rtl/decoder_term.sv)
+# ---------------------------------------------------------------------------
+#
+# Clocking K-1 = 3 zeros in after the message drives the register back to state
+# 0, so the decoder knows where the survivor ends and never has to guess.  The
+# code is still (2,1,4) -- only the block framing changes:
+#
+#     7 message bits  ->  10 trellis stages  ->  20 code bits
+#
+# It costs rate (7/20 rather than 7/14) and buys back the protection the last
+# message bits were missing.
+
+TAIL_BITS = K - 1
+TERM_MSG_BITS = MSG_BITS
+TERM_STAGES = MSG_BITS + TAIL_BITS
+TERM_CW_BITS = 2 * TERM_STAGES
+
+
+def encode_terminated(message: int, n_bits: int = MSG_BITS) -> int:
+    """Encode with a zero tail: `n_bits` message bits -> 2*(n_bits+3) code bits."""
+    bits = [(message >> (n_bits - 1 - i)) & 1 for i in range(n_bits)]
+    bits += [0] * TAIL_BITS
+    word = 0
+    for bit in encode_bits(bits):
+        word = (word << 1) | bit
+    return word
+
+
+def decode_terminated(word: int, n_bits: int = MSG_BITS) -> int:
+    """Decode a terminated codeword, tracing back from the known end state 0."""
+    total = 2 * (n_bits + TAIL_BITS)
+    received = [(word >> (total - 1 - i)) & 1 for i in range(total)]
+    bits = decode_bits(received, end_state=0)[:n_bits]     # drop the tail
+    msg = 0
+    for bit in bits:
+        msg = (msg << 1) | bit
+    return msg
+
+
 def trellis_trace(word: int = CANONICAL_CW, n_bits: int = MSG_BITS):
     """Metrics + survivors for plotting, plus the surviving state path."""
     received = [(word >> (2 * n_bits - 1 - i)) & 1 for i in range(2 * n_bits)]
@@ -286,6 +326,25 @@ def self_test() -> int:
     if corrected < total:
         print("        (< 100% is expected: the 7-bit block has no zero-tail "
               "flush, so errors in the last bits are not fully protected)")
+
+    # ---- terminated variant (rtl/decoder_term.sv) --------------------------
+    bad = [m for m in range(128) if decode_terminated(encode_terminated(m)) != m]
+    check("terminated round-trip over all 128 messages", bad, [])
+
+    total = corrected = 0
+    weak = []
+    for m in range(128):
+        cw = encode_terminated(m)
+        for pos in range(TERM_CW_BITS):
+            total += 1
+            ok = decode_terminated(cw ^ (1 << pos)) == m
+            corrected += ok
+            if not ok:
+                weak.append(pos)
+    check("terminated: every single-bit error corrected",
+          f"{corrected}/{total}", f"{total}/{total}")
+    if weak:
+        print(f"        uncorrected at codeword bit positions {sorted(set(weak))}")
 
     print(f"\n  {'all checks passed' if not fails else f'{fails} FAILURES'}")
     return fails

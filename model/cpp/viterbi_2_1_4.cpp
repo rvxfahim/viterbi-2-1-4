@@ -1,14 +1,46 @@
-// viterbi 2 1 4.cpp : This file contains the 'main' function. Program execution begins and ends there.
+// viterbi_2_1_4.cpp -- reference (2,1,4) Viterbi decoder.
 //
-#include <iostream>
+// Originally a single hardcoded decode of one canonical word, with the trellis
+// stages h1..h7 written out by hand in main() and the received bit pairs typed
+// in as literals.  The trellis classes below are the author's, essentially
+// unchanged; what changed is how they are driven:
+//
+//   * stages are built in a loop rather than unrolled, so the block length is a
+//     parameter (`--bits`) instead of being baked into main();
+//   * zero-tail termination is supported (`--terminate`), which forces the
+//     traceback to start at state 0 instead of scanning for the best end state;
+//   * cases are read from a file and each decode is checked against its
+//     expected message, so the program reports pass/fail rather than printing a
+//     trace for a human to read.
+//
+// One genuine bug was fixed, marked BUGFIX below in getFinalLowestState().
+//
+//     viterbi_2_1_4 --input vectors.txt --output results.csv
+//     viterbi_2_1_4 --bits 7 --terminate --input vectors_term.txt
+//
+// Input format: one case per line, `received [expected]`, both as bit strings,
+// MSB first.  Blank lines and lines starting with '#' are ignored.  Exit status
+// is 0 only if every case with an expected message decoded to it.
+
 #include <chrono>
+#include <fstream>
+#include <iostream>
+#include <sstream>
+#include <string>
+#include <vector>
 
 using namespace std;
 using namespace std::chrono;
+
+// The original code narrated every state it visited.  That is still available
+// with --verbose, but it is far too much output for a sweep of a few thousand
+// cases, so it is off by default.
+static bool g_verbose = false;
+#define TRACE(x) do { if (g_verbose) { cout << x; } } while (0)
+
 class FinalHammingDistance {
 public:
     int finalStates[8] = {0,0,0,0,0,0,0,0};
-    //int finalStates[4] ;
 };
 class CorrectSequence {
 public:
@@ -54,32 +86,19 @@ public:
 
     void calculateForState(int state) {
         switch (state) {
-        case 0:   
-            cout << "Debug:  " << endl;
-            //                cout<< "Step: "<< this->step<< endl;
-            //                cout<< "Previous Hamming: "<< this->previousHammingDistance[1]<< endl;
-            cout << "executing case a" << endl;
-            cout << "Debug End:" << endl;
+        case 0:
+            TRACE("executing case a" << endl);
             aTransition[0] = this->calculateDistanceForTransition(0, 0, this->previousHammingDistance[0]);
             aTransition[1] = this->calculateDistanceForTransition(1, 1, this->previousHammingDistance[0]);
-            
+
             hammingDistances.finalStates[0] = aTransition[0]; //integer
             hammingDistances.finalStates[4] = aTransition[1]; //integer
-            
+
             break; //calculated final hamming codes on state a
         case 1:
-            cout << "Debug:  " << endl;
-            //                cout<< "Step: "<< this->step<< endl;
-            //                cout<< "Previous Hamming: "<< this->previousHammingDistance[1]<< endl;
-            cout << "executing case b" << endl;
-            cout << "Debug End:" << endl;
+            TRACE("executing case b" << endl);
             bTransition[0] = this->calculateDistanceForTransition(1, 1, this->previousHammingDistance[1]);
             bTransition[1] = this->calculateDistanceForTransition(0, 0, this->previousHammingDistance[1]);
-            //                cout<< "Debug:  " << endl;
-            //                cout<< "Step: "<< this->step<< endl;
-            //                cout<< "Previous Hamming: "<< this->previousHammingDistance[1]<< endl;
-            //                cout << "B0: " << bTransition[0] <<endl;
-            //                cout <<"Debug End:"<<endl;
             if (bTransition[0] < hammingDistances.finalStates[0]) {
                 hammingDistances.finalStates[0] = bTransition[0];
                 aTransition[0] = -1;
@@ -98,23 +117,15 @@ public:
             }
             break;
         case 2:
-            cout << "Debug:  " << endl;
-            //                cout<< "Step: "<< this->step<< endl;
-            //                cout<< "Previous Hamming: "<< this->previousHammingDistance[1]<< endl;
-            cout << "executing case c" << endl;
-            cout << "Debug End:" << endl;
+            TRACE("executing case c" << endl);
             cTransition[0] = this->calculateDistanceForTransition(1, 0, this->previousHammingDistance[2]);
             cTransition[1] = this->calculateDistanceForTransition(0, 1, this->previousHammingDistance[2]);
-            
+
             hammingDistances.finalStates[1] = cTransition[0];
             hammingDistances.finalStates[5] = cTransition[1];
             break;
         case 3:
-            cout << "Debug:  " << endl;
-            //                cout<< "Step: "<< this->step<< endl;
-            //                cout<< "Previous Hamming: "<< this->previousHammingDistance[1]<< endl;
-            cout << "executing case d" << endl;
-            cout << "Debug End:" << endl;
+            TRACE("executing case d" << endl);
             dTransition[0] = this->calculateDistanceForTransition(0, 1, this->previousHammingDistance[3]);
             dTransition[1] = this->calculateDistanceForTransition(1, 0, this->previousHammingDistance[3]);
             if (dTransition[0] < hammingDistances.finalStates[1]) {
@@ -135,22 +146,14 @@ public:
             }
             break;
         case 4:
-            cout << "Debug:  " << endl;
-            //                cout<< "Step: "<< this->step<< endl;
-            //                cout<< "Previous Hamming: "<< this->previousHammingDistance[1]<< endl;
-            cout << "executing case e" << endl;
-            cout << "Debug End:" << endl;
+            TRACE("executing case e" << endl);
             eTransition[0] = this->calculateDistanceForTransition(1, 1, this->previousHammingDistance[4]);
             eTransition[1] = this->calculateDistanceForTransition(0, 0, this->previousHammingDistance[4]);
             hammingDistances.finalStates[2] = eTransition[0];
             hammingDistances.finalStates[6] = eTransition[1];
             break;
         case 5:
-            cout << "Debug:  " << endl;
-            //                cout<< "Step: "<< this->step<< endl;
-            //                cout<< "Previous Hamming: "<< this->previousHammingDistance[1]<< endl;
-            cout << "executing case f" << endl;
-            cout << "Debug End:" << endl;
+            TRACE("executing case f" << endl);
             fTransition[0] = this->calculateDistanceForTransition(0, 0, this->previousHammingDistance[5]);
             fTransition[1] = this->calculateDistanceForTransition(1, 1, this->previousHammingDistance[5]);
             if (fTransition[0] < hammingDistances.finalStates[2]) {
@@ -171,26 +174,18 @@ public:
             }
             break;
         case 6:
-            cout << "Debug:  " << endl;
-            //                cout<< "Step: "<< this->step<< endl;
-            //                cout<< "Previous Hamming: "<< this->previousHammingDistance[1]<< endl;
-            cout << "executing case g" << endl;
-            cout << "Debug End:" << endl;
+            TRACE("executing case g" << endl);
             gTransition[0] = this->calculateDistanceForTransition(0, 1, this->previousHammingDistance[6]);
             gTransition[1] = this->calculateDistanceForTransition(1, 0, this->previousHammingDistance[6]);
             hammingDistances.finalStates[3] = gTransition[0];
             hammingDistances.finalStates[7] = gTransition[1];
             break;
         case 7:
-            cout << "Debug:  " << endl;
-            //                cout<< "Step: "<< this->step<< endl;
-            //                cout<< "Previous Hamming: "<< this->previousHammingDistance[1]<< endl;
-            cout << "executing case h" << endl;
-            cout << "Debug End:" << endl;
+            TRACE("executing case h" << endl);
             hTransition[0] = this->calculateDistanceForTransition(1, 0, this->previousHammingDistance[7]);
             hTransition[1] = this->calculateDistanceForTransition(0, 1, this->previousHammingDistance[7]);
             if (hTransition[0] < hammingDistances.finalStates[3]) {
-                cout << "replacing d with hTransition[0] " <<hTransition[0] << endl;
+                TRACE("replacing d with hTransition[0] " << hTransition[0] << endl);
                 hammingDistances.finalStates[3] = hTransition[0];
                 gTransition[0] = -1;
             }
@@ -222,15 +217,8 @@ public:
     }
 
     void computeHammingDistance() {
-        /*for (int i = 0; i < 7; i++) {
-            this->calculateForState(i);
-            if (this->step == 1 && i == 0) {
-                break;
-            }
-            if (this->step == 2 && i == 1) {
-                break;
-            }
-        }*/
+        // Only states reachable from the all-zero start state exist in the
+        // first three stages, so the ladder opens up 1 -> 2 -> 4 -> 8 wide.
         if (this->step==1)
         {
             this->calculateForState(0);
@@ -293,7 +281,6 @@ public:
             }
             break;
         case 3:
-            //cout << "B1:" << bTransition[1] << endl;
             if (gTransition[0] != -1) {
                 previousState = 6;
             }
@@ -302,7 +289,6 @@ public:
             }
             break;
         case 4:
-            //cout << "B1:" << bTransition[1] << endl;
             if (aTransition[1] != -1) {
                 previousState = 0;
             }
@@ -311,7 +297,6 @@ public:
             }
             break;
         case 5:
-            //cout << "B1:" << bTransition[1] << endl;
             if (cTransition[1] != -1) {
                 previousState = 2;
             }
@@ -320,7 +305,6 @@ public:
             }
             break;
         case 6:
-            //cout << "B1:" << bTransition[1] << endl;
             if (eTransition[1] != -1) {
                 previousState = 4;
             }
@@ -329,7 +313,6 @@ public:
             }
             break;
         case 7:
-            //cout << "B1:" << bTransition[1] << endl;
             if (gTransition[1] != -1) {
                 previousState = 6;
             }
@@ -343,16 +326,22 @@ public:
     int getFinalLowestState() {
         int lowestValue = this->hammingDistances.finalStates[0];
         int i = 0;
-        int lowest_state=lowestValue;
+        // BUGFIX: this was `int lowest_state = lowestValue;` -- the *metric*,
+        // where a state *index* belongs.  The loop below uses a strict `<`, so
+        // when state 0 is the winner nothing ever assigns lowest_state and the
+        // path metric was returned as if it were a state number.  It happened
+        // to be right on an error-free word (metric 0, state 0) which is why
+        // the canonical example still printed the correct message, but with any
+        // channel error the traceback started from the wrong end state.
+        // rtl/legacy/decoder.sv:660 does this correctly.
+        int lowest_state = 0;
         for (i = 0; i < 8; i++) {
             if (this->hammingDistances.finalStates[i] < lowestValue) {
                 lowestValue = this->hammingDistances.finalStates[i];
-                cout << "debug start lowest value" << endl;
-                cout << "lowest value: " << lowestValue << endl;
+                TRACE("lowest value: " << lowestValue << endl);
                 lowest_state = i;
             }
         }
-        //return i - 1;
         return lowest_state;
     }
 };
@@ -360,42 +349,7 @@ public:
 
 
 CorrectSequence getSequence(int stateA, int stateB) {
-    cout << "returing bit sequence for states " << stateB << " to " << stateA << endl;
-    // if (stateA == 0 && stateB == 0) {
-    //     bitSequence.bits[0] = 0;
-    //     bitSequence.bits[1] = 0;
-    // }
-    // else if (stateA == 0 && stateB == 1) {
-    //     bitSequence.bits[0] = 1;
-    //     bitSequence.bits[1] = 1;
-    // }
-    // else if (stateA == 1 && stateB == 2) {
-    //     bitSequence.bits[0] = 1;
-    //     bitSequence.bits[1] = 0;
-    //     cout << "bitsequence from b to c " << bitSequence.bits[0] << bitSequence.bits[1] << endl;
-    // }
-    // else if (stateA == 1 && stateB == 3) {
-
-    //     bitSequence.bits[0] = 0;
-    //     bitSequence.bits[1] = 1;
-    //     cout << "bitsequence from b to d " << bitSequence.bits[0] << bitSequence.bits[1] << endl;
-    // }
-    // else if (stateA == 2 && stateB == 0) {
-    //     bitSequence.bits[0] = 1;
-    //     bitSequence.bits[1] = 1;
-    // }
-    // else if (stateA == 2 && stateB == 1) {
-    //     bitSequence.bits[0] = 0;
-    //     bitSequence.bits[1] = 0;
-    // }
-    // else if (stateA == 3 && stateB == 2) {
-    //     bitSequence.bits[0] = 0;
-    //     bitSequence.bits[1] = 1;
-    // }
-    // else if (stateA == 3 && stateB == 3) {
-    //     bitSequence.bits[0] = 1;
-    //     bitSequence.bits[1] = 0;
-    // }
+    TRACE("returing bit sequence for states " << stateB << " to " << stateA << endl);
     if (stateB == 0 && stateA == 0) {
         bitSequence.bits[0] = 0;
         bitSequence.bits[1] = 0;
@@ -479,212 +433,159 @@ CorrectSequence getSequence(int stateA, int stateB) {
     return bitSequence;
 }
 
-// `void main()` is an MSVC extension and is rejected by g++/clang; the only
-// change made to this file during the open-source port.
-int main() {
+
+// ---------------------------------------------------------------------------
+// Driver
+// ---------------------------------------------------------------------------
+
+struct Config {
+    int  msgBits   = 7;
+    bool terminate = false;
+    string inPath;
+    string outPath;
+};
+
+// The trellis stages main() used to write out by hand, built in a loop.  With
+// `terminate` the encoder has flushed K-1 = 3 zeros through the register, so
+// the path is known to end in state 0 and traceback starts there; otherwise it
+// starts wherever the metric is lowest, which is what the original did.
+static vector<int> decodeWord(const vector<int>& cw, int stages, bool terminate) {
+    vector<HammingTable> tables;
+    tables.reserve(stages);
+
+    int previousValues[8] = {0,0,0,0,0,0,0,0};
+    for (int s = 0; s < stages; s++) {
+        int bits[2] = { cw[2 * s], cw[2 * s + 1] };
+        if (s == 0) {
+            tables.push_back(HammingTable(1, bits));
+        } else {
+            tables.push_back(HammingTable(previousValues, s + 1, bits));
+        }
+        tables.back().computeHammingDistance();
+        FinalHammingDistance oldHam = tables.back().getFinalHammingDistance();
+        for (int i = 0; i < 8; i++) {
+            previousValues[i] = oldHam.finalStates[i];
+        }
+        if (g_verbose) {
+            cout << "stage " << (s + 1) << " :";
+            for (int i = 0; i < 8; i++) cout << " " << previousValues[i];
+            cout << endl;
+        }
+    }
+
+    int current = terminate ? 0 : tables.back().getFinalLowestState();
+    TRACE("Final state: " << current << endl);
+
+    vector<int> decoded(stages, 0);
+    for (int s = stages - 1; s >= 0; s--) {
+        int previous = tables[s].getReturnPath(current);
+        CorrectSequence seq = getSequence(previous, current);
+        decoded[s] = seq.decoded;
+        current = previous;
+    }
+    return decoded;
+}
+
+static string toBits(const vector<int>& v, int n) {
+    string s;
+    for (int i = 0; i < n; i++) s += char('0' + v[i]);
+    return s;
+}
+
+static void usage() {
+    cout <<
+      "usage: viterbi_2_1_4 [options]\n"
+      "  -i, --input FILE    cases to decode (default: stdin)\n"
+      "  -o, --output FILE   per-case CSV results (default: stdout)\n"
+      "  -b, --bits N        message bits per block (default 7)\n"
+      "  -t, --terminate     zero-tail terminated trellis: expects N+3 stages\n"
+      "                      (2N+6 received bits) and tracebacks from state 0\n"
+      "  -v, --verbose       print the original per-state trace\n"
+      "  -h, --help\n"
+      "\n"
+      "Each input line is `received [expected]` as bit strings, MSB first.\n"
+      "Blank lines and lines beginning with '#' are ignored.  Exit status is 0\n"
+      "only when every case carrying an expected message decoded to it.\n";
+}
+
+int main(int argc, char** argv) {
+    Config cfg;
+    for (int i = 1; i < argc; i++) {
+        string a = argv[i];
+        auto next = [&]() -> string {
+            if (i + 1 >= argc) { cerr << "missing value for " << a << endl; exit(2); }
+            return argv[++i];
+        };
+        if      (a == "-i" || a == "--input")     cfg.inPath = next();
+        else if (a == "-o" || a == "--output")    cfg.outPath = next();
+        else if (a == "-b" || a == "--bits")      cfg.msgBits = stoi(next());
+        else if (a == "-t" || a == "--terminate") cfg.terminate = true;
+        else if (a == "-v" || a == "--verbose")   g_verbose = true;
+        else if (a == "-h" || a == "--help")      { usage(); return 0; }
+        else { cerr << "unknown option: " << a << endl; usage(); return 2; }
+    }
+
+    const int tail    = cfg.terminate ? 3 : 0;      // K - 1 flush bits
+    const int stages  = cfg.msgBits + tail;
+    const int cwBits  = 2 * stages;
+
+    istream* in  = &cin;
+    ifstream fin;
+    if (!cfg.inPath.empty()) {
+        fin.open(cfg.inPath);
+        if (!fin) { cerr << "cannot open " << cfg.inPath << endl; return 2; }
+        in = &fin;
+    }
+    ostream* out = &cout;
+    ofstream fout;
+    if (!cfg.outPath.empty()) {
+        fout.open(cfg.outPath);
+        if (!fout) { cerr << "cannot open " << cfg.outPath << endl; return 2; }
+        out = &fout;
+    }
+
     auto start = high_resolution_clock::now();
-    cout << "hello" << endl;
-    int bits[2] = { 1, 1 };
-    HammingTable h1(1, bits);
-    h1.computeHammingDistance();
-    bits[0] = 1;
-    bits[1] = 1;
-    FinalHammingDistance oldHam = h1.getFinalHammingDistance();
-    int previousValues[8] = { oldHam.finalStates[0], oldHam.finalStates[1], oldHam.finalStates[2],
-                             oldHam.finalStates[3], oldHam.finalStates[4], oldHam.finalStates[5], oldHam.finalStates[6] ,oldHam.finalStates[7]};
-    cout << "a: " << previousValues[0];
-    cout << " b: " << previousValues[1];
-    cout << " c: " << previousValues[2];
-    cout << " d: " << previousValues[3];
-    cout << " e: " << previousValues[4];
-    cout << " f: " << previousValues[5];
-    cout << " g: " << previousValues[6];
-    cout << " h: " << previousValues[7] << endl;
+    *out << "case,received,decoded,expected,result\n";
 
-    HammingTable h2(previousValues, 2, bits);
-    h2.computeHammingDistance();
-    //bits[0] = 0;
-    //bits[1] = 1;
-    oldHam = h2.getFinalHammingDistance();
-    previousValues[0] = oldHam.finalStates[0];
-    previousValues[1] = oldHam.finalStates[1];
-    previousValues[2] = oldHam.finalStates[2];
-    previousValues[3] = oldHam.finalStates[3];
-    previousValues[4] = oldHam.finalStates[4];
-    previousValues[5] = oldHam.finalStates[5];
-    previousValues[6] = oldHam.finalStates[6];
-    previousValues[7] = oldHam.finalStates[7];
-    
-    cout << "a: " << previousValues[0];
-    cout << " b: " << previousValues[1];
-    cout << " c: " << previousValues[2];
-    cout << " d: " << previousValues[3];
-    cout << " e: " << previousValues[4];
-    cout << " f: " << previousValues[5];
-    cout << " g: " << previousValues[6];
-    cout << " h: " << previousValues[7] << endl;
+    long total = 0, checked = 0, passed = 0;
+    string line;
+    while (getline(*in, line)) {
+        if (!line.empty() && line.back() == '\r') line.pop_back();
+        if (line.empty() || line[0] == '#') continue;
 
-    bits[0] = 0;
-    bits[1] = 1;
-    HammingTable h3(previousValues, 3, bits);
-    h3.computeHammingDistance();
-    oldHam = h3.getFinalHammingDistance();
-    previousValues[0] = oldHam.finalStates[0];
-    previousValues[1] = oldHam.finalStates[1];
-    previousValues[2] = oldHam.finalStates[2];
-    previousValues[3] = oldHam.finalStates[3];
-    previousValues[4] = oldHam.finalStates[4];
-    previousValues[5] = oldHam.finalStates[5];
-    previousValues[6] = oldHam.finalStates[6];
-    previousValues[7] = oldHam.finalStates[7];
-    cout << "a: " << previousValues[0];
-    cout << " b: " << previousValues[1];
-    cout << " c: " << previousValues[2];
-    cout << " d: " << previousValues[3];
-    cout << " e: " << previousValues[4];
-    cout << " f: " << previousValues[5];
-    cout << " g: " << previousValues[6];
-    cout << " h: " << previousValues[7] << endl;
+        istringstream ls(line);
+        string received, expected;
+        ls >> received >> expected;
+        if ((int)received.size() != cwBits) {
+            cerr << "line " << (total + 1) << ": expected " << cwBits
+                 << " received bits, got " << received.size() << endl;
+            return 2;
+        }
 
+        vector<int> cw(cwBits);
+        for (int i = 0; i < cwBits; i++) cw[i] = received[i] - '0';
 
-    bits[0] = 1;
-    bits[1] = 1;
-    HammingTable h4(previousValues, 4, bits);
-    h4.computeHammingDistance();
-    oldHam = h4.getFinalHammingDistance();
-    previousValues[0] = oldHam.finalStates[0];
-    previousValues[1] = oldHam.finalStates[1];
-    previousValues[2] = oldHam.finalStates[2];
-    previousValues[3] = oldHam.finalStates[3];
-    previousValues[4] = oldHam.finalStates[4];
-    previousValues[5] = oldHam.finalStates[5];
-    previousValues[6] = oldHam.finalStates[6];
-    previousValues[7] = oldHam.finalStates[7];
-    cout << "a: " << previousValues[0];
-    cout << " b: " << previousValues[1];
-    cout << " c: " << previousValues[2];
-    cout << " d: " << previousValues[3];
-    cout << " e: " << previousValues[4];
-    cout << " f: " << previousValues[5];
-    cout << " g: " << previousValues[6];
-    cout << " h: " << previousValues[7] << endl;
+        vector<int> decoded = decodeWord(cw, stages, cfg.terminate);
+        string msg = toBits(decoded, cfg.msgBits);   // tail bits are not message
 
+        const char* result = "-";
+        if (!expected.empty()) {
+            checked++;
+            bool ok = (msg == expected);
+            passed += ok;
+            result = ok ? "PASS" : "FAIL";
+        }
+        *out << total << ',' << received << ',' << msg << ','
+             << (expected.empty() ? "-" : expected) << ',' << result << '\n';
+        total++;
+    }
 
-    bits[0] = 0;
-    bits[1] = 1;
-    HammingTable h5(previousValues, 5, bits);
-    h5.computeHammingDistance();
-    oldHam = h5.getFinalHammingDistance();
-    previousValues[0] = oldHam.finalStates[0];
-    previousValues[1] = oldHam.finalStates[1];
-    previousValues[2] = oldHam.finalStates[2];
-    previousValues[3] = oldHam.finalStates[3];
-    previousValues[4] = oldHam.finalStates[4];
-    previousValues[5] = oldHam.finalStates[5];
-    previousValues[6] = oldHam.finalStates[6];
-    previousValues[7] = oldHam.finalStates[7];
-    cout << "a: " << previousValues[0];
-    cout << " b: " << previousValues[1];
-    cout << " c: " << previousValues[2];
-    cout << " d: " << previousValues[3];
-    cout << " e: " << previousValues[4];
-    cout << " f: " << previousValues[5];
-    cout << " g: " << previousValues[6];
-    cout << " h: " << previousValues[7] << endl;
-
-    bits[0] = 0;
-    bits[1] = 1;
-    HammingTable h6(previousValues, 6, bits);
-    h6.computeHammingDistance();
-    oldHam = h6.getFinalHammingDistance();
-    previousValues[0] = oldHam.finalStates[0];
-    previousValues[1] = oldHam.finalStates[1];
-    previousValues[2] = oldHam.finalStates[2];
-    previousValues[3] = oldHam.finalStates[3];
-    previousValues[4] = oldHam.finalStates[4];
-    previousValues[5] = oldHam.finalStates[5];
-    previousValues[6] = oldHam.finalStates[6];
-    previousValues[7] = oldHam.finalStates[7];
-    cout << "a: " << previousValues[0];
-    cout << " b: " << previousValues[1];
-    cout << " c: " << previousValues[2];
-    cout << " d: " << previousValues[3];
-    cout << " e: " << previousValues[4];
-    cout << " f: " << previousValues[5];
-    cout << " g: " << previousValues[6];
-    cout << " h: " << previousValues[7] << endl;
-
-
-    bits[0] = 1;
-    bits[1] = 1;
-    HammingTable h7(previousValues, 7, bits);
-    h7.computeHammingDistance();
-    oldHam = h7.getFinalHammingDistance();
-    previousValues[0] = oldHam.finalStates[0];
-    previousValues[1] = oldHam.finalStates[1];
-    previousValues[2] = oldHam.finalStates[2];
-    previousValues[3] = oldHam.finalStates[3];
-    previousValues[4] = oldHam.finalStates[4];
-    previousValues[5] = oldHam.finalStates[5];
-    previousValues[6] = oldHam.finalStates[6];
-    previousValues[7] = oldHam.finalStates[7];
-    cout << "a: " << previousValues[0];
-    cout << " b: " << previousValues[1];
-    cout << " c: " << previousValues[2];
-    cout << " d: " << previousValues[3];
-    cout << " e: " << previousValues[4];
-    cout << " f: " << previousValues[5];
-    cout << " g: " << previousValues[6];
-    cout << " h: " << previousValues[7] << endl;
-
-    CorrectSequence sequenceBits;
-    cout << "Final Lowest State: " << h7.getFinalLowestState() << endl;
-    int previousState = h7.getReturnPath(h7.getFinalLowestState());
-    cout << "Tracked path State: " << previousState << endl;
-    sequenceBits = getSequence(previousState, h7.getFinalLowestState());
-    cout << "Bits: " << sequenceBits.bits[0] << sequenceBits.bits[1] << endl;
-    cout << "Bits: " << sequenceBits.decoded << endl;
-    int newState = h6.getReturnPath(previousState);
-    cout << "Previous Lowest State: " << newState << endl;
-    sequenceBits = getSequence(previousState, newState);
-    sequenceBits = getSequence(newState, previousState);
-    cout << "Bits: " << sequenceBits.bits[0] << sequenceBits.bits[1] << endl;
-    cout << "Bits: " << sequenceBits.decoded << endl;
-    previousState = newState;
-    newState = h5.getReturnPath(previousState);
-    cout << "Previous Lowest State: " << newState << endl;
-    sequenceBits = getSequence(newState, previousState);
-    cout << "Bits: " << sequenceBits.bits[0] << sequenceBits.bits[1] << endl;
-    cout << "Bits: " << sequenceBits.decoded << endl;
-    previousState = newState;
-    newState = h4.getReturnPath(previousState);
-    cout << "Previous Lowest State: " << newState << endl;
-    sequenceBits = getSequence(newState, previousState);
-    cout << "Bits: " << sequenceBits.bits[0] << sequenceBits.bits[1] << endl;
-    cout << "Bits: " << sequenceBits.decoded << endl;
-    previousState = newState;
-    newState = h3.getReturnPath(previousState);
-    cout << "Previous Lowest State: " << newState << endl;
-    sequenceBits = getSequence(newState, previousState);
-    cout << "Bits: " << sequenceBits.bits[0] << sequenceBits.bits[1] << endl;
-    cout << "Bits: " << sequenceBits.decoded << endl;
-    previousState = newState;
-    newState = h2.getReturnPath(previousState);
-    cout << "Previous Lowest State: " << newState << endl;
-    sequenceBits = getSequence(newState, previousState);
-    cout << "Bits: " << sequenceBits.bits[0] << sequenceBits.bits[1] << endl;
-    cout << "Bits: " << sequenceBits.decoded << endl;
-    previousState = newState;
-    newState = h1.getReturnPath(previousState);
-    cout << "Previous Lowest State: " << newState << endl;
-    sequenceBits = getSequence(newState, previousState);
-    cout << "Bits: " << sequenceBits.bits[0] << sequenceBits.bits[1] << endl;
-    cout << "Bits: " << sequenceBits.decoded << endl;
-
-
-
-
-    auto stop = high_resolution_clock::now();
-    auto duration = duration_cast<microseconds>(stop - start);
-    cout << duration.count() << endl;
+    auto duration = duration_cast<microseconds>(high_resolution_clock::now() - start);
+    cerr << "decoded " << total << " cases in " << duration.count() << " us\n";
+    if (checked) {
+        cerr << (passed == checked ? "PASS" : "FAIL") << "  corrected "
+             << passed << "/" << checked << "  ("
+             << (100.0 * passed / checked) << "%)\n";
+    }
+    return (checked && passed != checked) ? 1 : 0;
 }

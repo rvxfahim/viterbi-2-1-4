@@ -382,9 +382,11 @@ results/vcd/
 *.bin
 *.blif
 *.edif
-results/synth/decoder_ice40.json
-results/synth/decoder_yosys.log
-results/synth/d_ff_yosys.log
+results/synth/*_ice40.json
+results/synth/*_yosys.log
+
+# C++ model build + generated vectors (regenerable)
+results/cpp/
 
 # Python
 __pycache__/

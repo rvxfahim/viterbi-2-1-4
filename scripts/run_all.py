@@ -7,8 +7,11 @@ entry point.
 
     python scripts/run_all.py all            # everything
     python scripts/run_all.py env            # capability probe
+    python scripts/run_all.py gen            # regenerate the RTL from its template
+    python scripts/run_all.py model          # Python golden model self-test
+    python scripts/run_all.py cpp            # C++ reference model vs the model
     python scripts/run_all.py sim            # RTL simulation + self-checks
-    python scripts/run_all.py sweep          # exhaustive RTL correctness sweep
+    python scripts/run_all.py sweep          # exhaustive RTL correctness sweeps
     python scripts/run_all.py ber            # Monte-Carlo BER study
     python scripts/run_all.py synth          # Yosys / nextpnr
     python scripts/run_all.py plots          # regenerate every figure
@@ -38,6 +41,7 @@ IMG_DIR = REPO / "docs" / "img"
 RTL_DECODER = ["rtl/decoder.sv"]
 RTL_ENCODER = ["rtl/d_ff.sv"]
 RTL_BOTH = ["rtl/decoder.sv", "rtl/d_ff.sv"]
+RTL_BOTH_TERM = ["rtl/decoder_term.sv", "rtl/d_ff.sv"]
 
 GREEN, RED, YELLOW, DIM, RESET = (
     "\033[32m", "\033[31m", "\033[33m", "\033[2m", "\033[0m",
@@ -170,22 +174,31 @@ def cmd_sim(args) -> None:
 # sweep
 # ---------------------------------------------------------------------------
 
-def cmd_sweep(args) -> None:
-    _hdr("Exhaustive RTL correctness sweep (128 messages x 15 channels)")
-    VCD_DIR.mkdir(parents=True, exist_ok=True)
-    vl.build("system_tb", RTL_BOTH + ["tb/system_tb.sv"])
+def _sweep_one(top: str, sources: list[str], csv_name: str, label: str) -> None:
+    vl.build(top, sources + [f"tb/{top}.sv"])
     t0 = time.time()
-    proc = vl.run("system_tb",
-                  plusargs={"VCD": "results/vcd/system_tb.vcd",
-                            "CSV": "results/ber/rtl_sweep.csv"},
+    proc = vl.run(top,
+                  plusargs={"VCD": f"results/vcd/{top}.vcd",
+                            "CSV": f"results/ber/{csv_name}"},
                   quiet=True, check=False)
+    print(f"  {label}")
     sys.stdout.write("\n".join(
-        l for l in proc.stdout.splitlines()
+        "    " + l for l in proc.stdout.splitlines()
         if l.startswith(("SUMMARY", "FAIL", "RESULT"))
     ) + "\n")
     print(f"  {DIM}elapsed {time.time() - t0:.1f}s{RESET}")
     if proc.returncode != 0:
-        raise SystemExit("system_tb FAILED")
+        raise SystemExit(f"{top} FAILED")
+
+
+def cmd_sweep(args) -> None:
+    _hdr("Exhaustive RTL correctness sweeps")
+    VCD_DIR.mkdir(parents=True, exist_ok=True)
+    BER_DIR.mkdir(parents=True, exist_ok=True)
+    _sweep_one("system_tb", RTL_BOTH, "rtl_sweep.csv",
+               "decoder      -- 128 messages x 15 channels  (14-bit, unterminated)")
+    _sweep_one("system_term_tb", RTL_BOTH_TERM, "rtl_sweep_term.csv",
+               "decoder_term -- 128 messages x 21 channels  (20-bit, terminated)")
     _py("scripts/check_rtl.py")
 
 
@@ -193,9 +206,19 @@ def cmd_sweep(args) -> None:
 # model / ber / plots / synth
 # ---------------------------------------------------------------------------
 
+def cmd_gen(args) -> None:
+    _hdr("Generate RTL from rtl/gen/decoder.sv.j2")
+    _py("scripts/gen_rtl.py", *(["--check"] if args.check else []))
+
+
 def cmd_model(_args) -> None:
     _hdr("Python golden model self-test")
     _py("model/viterbi_ref.py", "--self-test")
+
+
+def cmd_cpp(_args) -> None:
+    _hdr("C++ reference model")
+    _py("scripts/check_cpp.py")
 
 
 def cmd_ber(args) -> None:
@@ -237,7 +260,9 @@ def cmd_clean(_args) -> None:
 
 def cmd_all(args) -> None:
     cmd_env(args)
+    cmd_gen(args)
     cmd_model(args)
+    cmd_cpp(args)
     cmd_sim(args)
     cmd_sweep(args)
     cmd_ber(args)
@@ -252,7 +277,14 @@ def main() -> None:
     sub = p.add_subparsers(dest="cmd", required=True)
 
     sub.add_parser("env").set_defaults(func=cmd_env)
+
+    g = sub.add_parser("gen")
+    g.add_argument("--check", action="store_true",
+                   help="verify the checked-in RTL matches the template")
+    g.set_defaults(func=cmd_gen)
+
     sub.add_parser("model").set_defaults(func=cmd_model)
+    sub.add_parser("cpp").set_defaults(func=cmd_cpp)
 
     s = sub.add_parser("sim")
     s.add_argument("--only", choices=["legacy", "decoder_bench", "encoder_bench"])
@@ -277,6 +309,8 @@ def main() -> None:
     a.add_argument("--jobs", type=int, default=0)
     a.add_argument("--skip-pnr", action="store_true")
     a.add_argument("--only", default=None)
+    a.add_argument("--check", action="store_true",
+                   help="check the generated RTL is current instead of rewriting it")
     a.set_defaults(func=cmd_all)
 
     args = p.parse_args()

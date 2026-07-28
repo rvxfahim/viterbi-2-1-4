@@ -72,11 +72,11 @@ module system_tb;
   // -------------------------------------------------------------------------
   // Decode `rx` into `out`.
   //
-  // NOTE: rtl/decoder.sv resets steps_n, stage_n, table_counter and pinOut but
-  // never resets counter_for_path, so a second decode in the same simulation
-  // would start with a stale traceback counter.  The bench zeroes it through a
-  // cross-module reference.  This is a latent defect in the original RTL, not
-  // a testbench convenience -- see docs/known-issues.md.
+  // This used to need a cross-module reference to zero dec.counter_for_path,
+  // because the original RTL never cleared it on reset and so decoded exactly
+  // one word per power-on.  The generated decoder clears it, so reset alone is
+  // now enough and the sweep exercises that -- 1920 decodes back to back with
+  // nothing but reset between them.  See docs/known-issues.md #1.
   // -------------------------------------------------------------------------
   task automatic do_decode();
     @(negedge clk);
@@ -84,7 +84,6 @@ module system_tb;
     ready     = 1'b0;
     dat       = rx;
     @(posedge clk);
-    dec.counter_for_path = 0;
 
     @(negedge clk);
     dec_reset = 1'b1;

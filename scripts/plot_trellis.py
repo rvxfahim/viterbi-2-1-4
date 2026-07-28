@@ -179,12 +179,91 @@ def draw_heatmap(theme):
     return fig, "error_correction_heatmap"
 
 
+def _load_grid(path, cw_bits):
+    grid = np.zeros((cw_bits, 128), dtype=float)
+    with path.open(newline="") as fh:
+        for row in csv.DictReader(fh):
+            e = int(row["error_bit"])
+            if e >= 0:
+                grid[e, int(row["message"], 2)] = float(row["pass"])
+    return grid
+
+
+def draw_heatmap_compare(theme):
+    """The same sweep against both decoder variants, stacked for comparison.
+
+    This is the single figure that shows what the fix bought: the same
+    add-compare-select logic, the same encoder, the same channel -- the only
+    difference is three zero bits clocked in at the end of the block.
+    """
+    plain = _load_grid(BER_DIR / "rtl_sweep.csv", 14)
+    term = _load_grid(BER_DIR / "rtl_sweep_term.csv", 20)
+
+    good, bad = theme["good"], theme["critical"]
+    cmap = plt.matplotlib.colors.ListedColormap([bad, good])
+
+    fig, axes = plt.subplots(
+        2, 1, figsize=(10.2, 8.0),
+        gridspec_kw={"height_ratios": [14, 20], "hspace": 0.34},
+    )
+    # Two panels share one title block, so it lives on the figure rather than
+    # on an axes -- vs.titles() would overwrite the first panel's own label.
+    fig.subplots_adjust(top=0.855)
+    fig.text(0.055, 0.975, "What terminating the trellis is worth",
+             ha="left", va="top", fontsize=12.5, fontweight="600",
+             color=theme["ink"])
+    fig.text(0.055, 0.945,
+             "Identical ACS logic, identical encoder, identical channel. The "
+             "only difference is three\nzero bits clocked in at the end of the "
+             "block, which pins the survivor's end state.",
+             ha="left", va="top", fontsize=9.5, color=theme["muted"],
+             linespacing=1.45)
+
+    for ax, grid, title in (
+        (axes[0], plain, "decoder — 14-bit block, no tail flush"),
+        (axes[1], term, "decoder_term — 20-bit block, zero-tail terminated"),
+    ):
+        rows = grid.shape[0]
+        ax.imshow(grid, aspect="auto", origin="lower", interpolation="nearest",
+                  cmap=cmap, vmin=0, vmax=1,
+                  extent=(-0.5, 127.5, -0.5, rows - 0.5))
+        ax.set_ylabel("flipped codeword bit")
+        ax.set_yticks(range(0, rows, 2))
+        ax.set_xticks(range(0, 128, 16))
+        vs.despine(ax, keep=())
+        ax.tick_params(length=0)
+        ax.grid(False)
+        pct = 100 * grid.mean()
+        ax.set_title(f"{title}      {int(grid.sum())}/{grid.size}  ({pct:.1f}%)",
+                     loc="left", fontsize=10.5, fontweight="600",
+                     color=theme["ink"], pad=6)
+
+    axes[0].axhline(3.5, color=theme["ink"], lw=1.6)
+    axes[0].annotate("bits 0–3: the un-flushed tail — half of all messages fail",
+                     xy=(2, 2.95), ha="left", va="top", fontsize=9,
+                     fontweight="600", color="#ffffff")
+    axes[1].annotate("every bit position, every message — no failures",
+                     xy=(2, 9.5), ha="left", va="center", fontsize=9,
+                     fontweight="600", color="#ffffff")
+
+    axes[1].set_xlabel("message  (0 … 127)")
+    axes[1].legend(handles=[
+        Patch(facecolor=good, label="message recovered"),
+        Patch(facecolor=bad, label="decode failed"),
+    ], loc="upper right", bbox_to_anchor=(1.0, -0.16), ncol=2)
+    return fig, "error_correction_compare"
+
+
 def main() -> None:
     vs.both_themes(draw_trellis)
     if (BER_DIR / "rtl_sweep.csv").exists():
         vs.both_themes(draw_heatmap)
     else:
         print("  skipping heatmap -- run: python scripts/run_all.py sweep")
+    if (BER_DIR / "rtl_sweep_term.csv").exists():
+        vs.both_themes(draw_heatmap_compare)
+    else:
+        print("  skipping comparison -- run: python scripts/run_all.py sweep")
 
 
 if __name__ == "__main__":

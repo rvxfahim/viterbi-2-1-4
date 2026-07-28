@@ -108,15 +108,16 @@ def synth_encoder(env: dict) -> dict:
     return {"cells": _stat_cells(out)}
 
 
-def synth_decoder(env: dict) -> dict:
+def synth_decoder(env: dict, top: str = "decoder") -> dict:
+    """Synthesise one decoder variant.  `top` is `decoder` or `decoder_term`."""
     script = (
-        "read_slang --top decoder rtl/decoder.sv; "
-        "hierarchy -check -top decoder; "
-        "tee -o results/synth/decoder_generic_stat.txt stat; "
-        "synth_ice40 -top decoder -json results/synth/decoder_ice40.json; "
-        "tee -o results/synth/decoder_ice40_stat.txt stat"
+        f"read_slang --top {top} rtl/{top}.sv; "
+        f"hierarchy -check -top {top}; "
+        f"tee -o results/synth/{top}_generic_stat.txt stat; "
+        f"synth_ice40 -top {top} -json results/synth/{top}_ice40.json; "
+        f"tee -o results/synth/{top}_ice40_stat.txt stat"
     )
-    out = run(["yosys", "-p", script], env, SYNTH_DIR / "decoder_yosys.log")
+    out = run(["yosys", "-p", script], env, SYNTH_DIR / f"{top}_yosys.log")
     return {"cells": _stat_cells(out)}
 
 
@@ -130,12 +131,12 @@ def _stat_cells(text: str) -> dict[str, int]:
     return cells
 
 
-def pnr(env: dict) -> dict:
-    log = SYNTH_DIR / "decoder_nextpnr.log"
+def pnr(env: dict, top: str = "decoder") -> dict:
+    log = SYNTH_DIR / f"{top}_nextpnr.log"
     out = run([f"nextpnr-{DEVICE['family']}", DEVICE["part"],
                "--package", DEVICE["package"],
-               "--json", "results/synth/decoder_ice40.json",
-               "--asc", "results/synth/decoder.asc",
+               "--json", f"results/synth/{top}_ice40.json",
+               "--asc", f"results/synth/{top}.asc",
                "--freq", "50", "--placer", "heap", "--seed", "1"],
               env, log, check=False)
 
@@ -189,19 +190,23 @@ def main() -> None:
     print("  synthesising encoder (rtl/d_ff.sv, built-in front end) ...")
     summary["encoder"] = synth_encoder(env)
 
-    print("  synthesising decoder (rtl/decoder.sv, read_slang front end) ...")
-    summary["decoder"] = synth_decoder(env)
-    cells = summary["decoder"]["cells"]
-    print(f"    SB_LUT4 {cells.get('SB_LUT4', 0)}, "
-          f"SB_CARRY {cells.get('SB_CARRY', 0)}, "
-          f"flops {sum(v for k, v in cells.items() if k.startswith('SB_DFF'))}")
+    # Both decoder variants come off the same template, so synthesising both
+    # is what puts a number on what termination costs in area and Fmax.
+    for top in ("decoder", "decoder_term"):
+        print(f"  synthesising {top} (rtl/{top}.sv, read_slang front end) ...")
+        summary[top] = synth_decoder(env, top)
+        cells = summary[top]["cells"]
+        print(f"    SB_LUT4 {cells.get('SB_LUT4', 0)}, "
+              f"SB_CARRY {cells.get('SB_CARRY', 0)}, "
+              f"flops {sum(v for k, v in cells.items() if k.startswith('SB_DFF'))}")
 
-    if not args.skip_pnr:
-        print(f"  place & route on {DEVICE['name']} ...")
-        summary["pnr"] = pnr(env)
-        lc = summary["pnr"]["utilisation"].get("ICESTORM_LC", {})
-        print(f"    {lc.get('used')}/{lc.get('total')} logic cells "
-              f"({lc.get('percent')}%),  Fmax {summary['pnr']['fmax_mhz']} MHz")
+        if not args.skip_pnr:
+            print(f"    place & route on {DEVICE['name']} ...")
+            summary[top]["pnr"] = pnr(env, top)
+            lc = summary[top]["pnr"]["utilisation"].get("ICESTORM_LC", {})
+            print(f"      {lc.get('used')}/{lc.get('total')} logic cells "
+                  f"({lc.get('percent')}%),  "
+                  f"Fmax {summary[top]['pnr']['fmax_mhz']} MHz")
 
     if not args.skip_schematic:
         summary["schematic"] = schematic(env)

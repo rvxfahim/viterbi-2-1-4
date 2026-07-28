@@ -5,17 +5,18 @@
 
         +----------Local Count, excluding submodules.
         | 
-     1656 wires
-     4072 wire bits
-     1656 public wires
-     4072 public wire bits
+     1562 wires
+     3867 wire bits
+     1562 public wires
+     3867 public wire bits
         5 ports
        24 port bits
-     2495 cells
-      527   SB_CARRY
-      297   SB_DFF
-       22   SB_DFFE
-      199   SB_DFFESR
-        1   SB_DFFESS
-     1449   SB_LUT4
+     2346 cells
+      511   SB_CARRY
+        8   SB_DFF
+      244   SB_DFFE
+      201   SB_DFFESR
+        4   SB_DFFESS
+       40   SB_DFFSR
+     1338   SB_LUT4
 

@@ -56,8 +56,8 @@ def _label_end(ax, x, y, text, color, theme, dy=0.0, side="right"):
 SERIES_AWGN = [
     #  key           legend label                   short label   slot
     ("uncoded",    "Uncoded BPSK",                  "uncoded",     0),
-    ("rtl",        "This design (no tail flush)",   "as built",    1),
-    ("terminated", "Zero-tail terminated",          "terminated",  2),
+    ("rtl",        "decoder (no tail flush)",       "decoder",     1),
+    ("terminated", "decoder_term (zero-tail)",      "term",        2),
     ("soft",       "Soft decision (no tail flush)", "soft",        3),
 ]
 
@@ -102,8 +102,9 @@ def draw_awgn(theme):
     ax.set_ylabel("Bit error rate")
     vs.titles(ax,
               "Coding gain over AWGN — rate 1/2, K = 4",
-              "The as-built decoder is worse than no coding at all: a 7-bit block "
-              "with no zero-tail\nflush cannot pay back the rate-1/2 energy penalty.",
+              "rtl/decoder.sv is worse than no coding at all — a 7-bit block with "
+              "no zero-tail flush\ncannot pay back the rate-1/2 energy penalty. "
+              "rtl/decoder_term.sv adds the flush.",
               theme)
     ax.set_xlim(x[0], x[-1] + 1.6)
     ax.set_ylim(FLOOR, 1)
@@ -132,8 +133,8 @@ def draw_awgn(theme):
 
 SERIES_BSC = [
     ("uncoded",    "Uncoded",                    "uncoded",    0),
-    ("rtl",        "This design (no tail flush)", "as built",   1),
-    ("terminated", "Zero-tail terminated",       "terminated", 2),
+    ("rtl",        "decoder (no tail flush)",    "decoder",    1),
+    ("terminated", "decoder_term (zero-tail)",   "term",       2),
 ]
 
 

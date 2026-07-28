@@ -90,6 +90,22 @@ On Windows, `subprocess` resolves argv[0] against the *parent's* PATH rather
 than the environment handed to the child, so `scripts/synth.py` resolves each
 tool to an absolute path before launching it.
 
+## RTL generation - Jinja2
+
+`rtl/decoder.sv` and `rtl/decoder_term.sv` are generated from
+`rtl/gen/decoder.sv.j2` by `scripts/gen_rtl.py`. The template needs nothing but
+`jinja2`; there is no HDL generator framework involved.
+
+    pip install jinja2
+    python scripts/run_all.py gen           # regenerate
+    python scripts/run_all.py gen --check   # fail if the checked-in RTL drifted
+
+The generator derives every branch's expected output pair from the generator
+polynomials rather than transcribing it, so the seven-stage and ten-stage
+decoders cannot disagree by typo. Correctness is not taken on faith: the
+generated seven-stage decoder is held to the same 1920-case equivalence check
+against `model/viterbi_ref.py` that the hand-written original passes.
+
 ## Plotting
 
 `vcdvcd` reads the VCDs; matplotlib draws everything. Verilator writes vector
@@ -105,4 +121,5 @@ names with a trailing bit range (`tb.dut.q[3:0]`), which the resolver in
 | nextpnr-ice40 | OSS CAD Suite 2026-07-28 |
 | Python | 3.12 |
 | numpy / matplotlib / vcdvcd | 2.4 / 3.10 / 2.6 |
+| jinja2 | 3.1 |
 | Node (netlistsvg, optional) | 24 |

@@ -89,9 +89,59 @@ def check_decoder() -> int:
     return rc
 
 
+def check_decoder_terminated() -> int:
+    """Same cross-check for rtl/decoder_term.sv, plus the stronger claim.
+
+    The unterminated decoder can only be asked to agree with the model.  The
+    terminated one can be held to an absolute standard: a (2,1,4) code has free
+    distance 6, so with the trellis forced back to state 0 every single-bit
+    error anywhere in the 20-bit block must be corrected.
+    """
+    path = BER_DIR / "rtl_sweep_term.csv"
+    if not path.exists():
+        print(f"  {YELLOW}SKIP{RESET}  {path.name} missing "
+              f"(run: python scripts/run_all.py sweep)")
+        return 0
+
+    mismatches, uncorrected = [], []
+    total = 0
+    with path.open(newline="") as fh:
+        for row in csv.DictReader(fh):
+            total += 1
+            msg = int(row["message"], 2)
+            rx = int(row["received"], 2)
+            rtl_out = int(row["decoded"], 2)
+            model_out = ref.decode_terminated(rx)
+            if rtl_out != model_out:
+                mismatches.append((row["message"], row["error_bit"],
+                                   rtl_out, model_out))
+            if rtl_out != msg:
+                uncorrected.append((row["message"], row["error_bit"]))
+
+    rc = 0
+    if mismatches:
+        print(f"  {RED}FAIL{RESET}  decoder_term: {len(mismatches)}/{total} cases "
+              f"where RTL and model disagree")
+        for m, e, r, w in mismatches[:5]:
+            print(f"          msg={m} err={e:>3}  rtl={r:07b}  model={w:07b}")
+        rc = 1
+    else:
+        print(f"  {GREEN}PASS{RESET}  decoder_term: RTL and model agree on all "
+              f"{total} decode cases")
+
+    if uncorrected:
+        print(f"  {RED}FAIL{RESET}  decoder_term: {len(uncorrected)}/{total} "
+              f"single-bit errors not corrected")
+        rc = 1
+    else:
+        print(f"  {GREEN}PASS{RESET}  decoder_term: every single-bit error in "
+              f"all {total} cases corrected")
+    return rc
+
+
 def main() -> None:
     print("Cross-checking RTL against the Python golden model")
-    rc = check_encoder() + check_decoder()
+    rc = check_encoder() + check_decoder() + check_decoder_terminated()
     if rc:
         raise SystemExit(rc)
 
