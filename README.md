@@ -43,6 +43,7 @@ python scripts/run_all.py cpp      # C++ reference model vs the golden model
 python scripts/run_all.py sim      # RTL simulation + self-checking benches
 python scripts/run_all.py sweep    # exhaustive correctness sweeps
 python scripts/run_all.py long     # generated RTL at 20 and 40 message bits
+python scripts/run_all.py folded   # folded RTL at 20/40/100 bits, and its BER
 python scripts/run_all.py ber      # Monte-Carlo BER study
 python scripts/run_all.py synth    # Yosys + nextpnr   (needs OSS CAD Suite)
 python scripts/run_all.py plots    # regenerate all figures
@@ -70,6 +71,7 @@ tb/
   system_term_tb.sv                            terminated, 2688-case sweep
   system_folded_tb.sv                          folded, 2688 + 512 3-error cases
   decoder_gen_tb.sv                            any block length, -GMSG_BITS=N
+  decoder_folded_gen_tb.sv                     folded, any length, over a BSC
   legacy/                                      the 2022 testbenches, verbatim
 model/
   viterbi_ref.py                               bit-accurate golden model
@@ -82,6 +84,7 @@ scripts/
   synth.py                                     Yosys + nextpnr + netlistsvg
   check_rtl.py  check_cpp.py                   RTL / C++ vs model equivalence
   check_long.py                                generated RTL at 20 / 40 bits
+  check_folded.py                              folded RTL at 20/40/100 + its BER
   plot_waves.py, plot_ber.py, plot_trellis.py  figures
   plot_area.py                                 area against block length
   vizstyle.py                                  shared light/dark plot theme
@@ -158,9 +161,12 @@ the survivor memory and the parallel input register is therefore constant in
 block length — and both of those are memory, not logic.
 
 It is hand-written rather than generated, because the whole point is that it
-needs no per-stage code at all. It is held to the same 2688 exhaustive cases as
-`decoder_term`, plus 512 random three-error words, and agrees with the golden
-model on all 3200.
+needs no per-stage code at all. At 7 message bits it is held to the same 2688
+exhaustive cases as `decoder_term`, plus 512 random three-error words, and
+agrees with the golden model on all 3200. `tb/decoder_folded_gen_tb.sv` takes
+`MSG_BITS` as a parameter and carries that agreement out to 20, 40 and 100
+message bits — the same RTL, no re-render, since there is no per-stage code to
+re-render.
 
 Full detail — tie-breaking rules, the cycle schedule, the critical path — is in
 **[docs/architecture.md](docs/architecture.md)**. Before wiring anything up,
@@ -211,6 +217,24 @@ block drop the effective rate to 0.35, and `10 log10(0.35 · 6 / 2)` = +0.21 dB.
 The tail is 3 bits however long the block is, so a longer block gets most of the
 code's gain back — +1.54 dB at 100 message bits. The RTL is hard-decision only;
 soft decision would be worth about 3.2 dB more.
+
+Those curves come from `model/ber_sweep.py`. The folded decoder is what makes
+the long block fit on a device, so the long-block end of them is also measured
+on the RTL itself, by `tb/decoder_folded_gen_tb.sv`. Hard-decision BPSK over
+AWGN *is* a binary symmetric channel with `p = Q(√(2·R·Eb/N0))`, so the bench
+runs a BSC at exactly the crossover each Eb/N0 implies:
+
+| Eb/N0 | 7 bits, RTL | 100 bits, RTL | 100 bits, model | uncoded |
+|---|---|---|---|---|
+| 4 dB | 2.29e-2 | 1.15e-2 | 1.18e-2 | 1.25e-2 |
+| 5 dB | 9.01e-3 | 2.87e-3 | 2.83e-3 | 5.95e-3 |
+| 6 dB | 2.48e-3 | 5.48e-4 | 5.65e-4 | 2.39e-3 |
+| 7 dB | 6.86e-4 | 5.35e-5 | 7.03e-5 | 7.73e-4 |
+
+2 million decoded message bits per 100-bit point, on the real decoder. The
+7-bit column is still losing to uncoded until about 6.4 dB; the 100-bit column
+is a factor of 14 better than uncoded by 7 dB, which is the ~1.5 dB of gain the
+model predicts, now measured through the RTL rather than around it.
 
 ### The folded decoder scales
 
@@ -268,6 +292,10 @@ PASS  encoder: all 128 RTL codewords match model/viterbi_ref.encode()
 PASS  decoder: RTL and model agree on all 1920 decode cases
 PASS  decoder_term: RTL and model agree on all 2688 decode cases
 PASS  decoder_folded: RTL and model agree on all 3200 decode cases
+
+PASS  folded, 20 message bits  (23 stages,  46 clocks): all 200 frames
+PASS  folded, 40 message bits  (43 stages,  86 clocks): all 200 frames
+PASS  folded, 100 message bits (103 stages, 206 clocks): all 200 frames
 ```
 
 Known defects found and fixed along the way are written up in

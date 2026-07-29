@@ -1,15 +1,19 @@
 """Digital timing diagrams rendered from real VCDs with vcdvcd + matplotlib.
 
-Replaces the four screenshots the original README linked to, and adds one the
-old flow could not produce at all: the eight surviving path metrics inside the
-decoder.  The vendor setup dumped only the top-level testbench signals, but
-Verilator dumps the whole hierarchy, so h1..h7.hammingDistances.finalStates[*]
-are visible for the first time.
+Replaces the four screenshots the original README linked to, and adds the
+per-stage path metrics.  The legacy benches call `$dumpvars(1)`, which dumps
+only top-level signals, but Verilator dumps the whole hierarchy regardless, so
+h1..h7.hammingDistances.finalStates[*] reach the VCD too.
 
-  encoder_waveform          from the legacy dff_tb   -> replaces README image 2
-  decoder_waveform_clean    clean codeword           -> replaces README image 3
-  decoder_waveform_error    dat[6] flipped           -> replaces README image 4
-  decoder_metrics           path metrics per stage   -> new
+All of these are embedded in docs/architecture.md; the README carries only
+decoder_metrics.
+
+  encoder_waveform          from the legacy dff_tb
+  decoder_waveform_clean    clean codeword
+  decoder_waveform_error    dat[6] flipped
+  decoder_term_waveform     terminated, 20 received bits
+  decoder_metrics           path metrics per stage
+  decoder_term_metrics      path metrics with the zero tail
 """
 
 from __future__ import annotations

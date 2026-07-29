@@ -293,3 +293,36 @@ regression. Two standard fixes, neither applied yet: put a pipeline register
 between the add-compare-select and the normalisation, or drop the explicit
 minimum-search in favour of modulo arithmetic, which bounds the metrics without
 a reduction tree at all.
+
+### 15. Verilator hoists a bare `$urandom` out of a loop in an `if` condition
+
+Found while writing `tb/decoder_folded_gen_tb.sv`, which needs a per-code-bit
+Bernoulli draw for its binary symmetric channel. Written the obvious way:
+
+```systemverilog
+for (int b = 0; b < CW_BITS; b++)
+  if (($urandom % 1000000) < ppm) rx[b] ^= 1'b1;
+```
+
+Verilator 5.050 evaluates the condition **once per loop**, not once per
+iteration, so every frame has either all of its code bits flipped or none of
+them. Assigning to a variable first fixes it:
+
+```systemverilog
+for (int b = 0; b < CW_BITS; b++) begin
+  draw = $urandom;
+  if ((draw % 1000000) < ppm) rx[b] ^= 1'b1;
+end
+```
+
+What makes this worth writing down is that the broken version does not look
+broken. The *frame* error rate lands almost exactly on `p`, so the resulting
+BER curve has a plausible shape and sits on a plausible slope — it was only
+caught because it disagreed with `model/ber_sweep.py` by a factor of four at
+the same crossover probability. A channel model that is wrong per-bit but right
+per-frame is not something a summary count can see.
+
+The `rx ^= 1'b1 << ($urandom % CW_BITS)` form used by `tb/system_folded_tb.sv`
+and `tb/decoder_gen_tb.sv` for error-position injection was checked against the
+same suspicion and is evaluated correctly, once per iteration: their random
+three-error words really do carry three distinct positions.

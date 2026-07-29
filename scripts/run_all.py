@@ -12,6 +12,8 @@ entry point.
     python scripts/run_all.py cpp            # C++ reference model vs the model
     python scripts/run_all.py sim            # RTL simulation + self-checks
     python scripts/run_all.py sweep          # exhaustive RTL correctness sweeps
+    python scripts/run_all.py long           # generated RTL at 20 and 40 bits
+    python scripts/run_all.py folded         # folded RTL at 20/40/100 bits + BER
     python scripts/run_all.py ber            # Monte-Carlo BER study
     python scripts/run_all.py synth          # Yosys / nextpnr
     python scripts/run_all.py plots          # regenerate every figure
@@ -268,6 +270,18 @@ def cmd_long(args) -> None:
     _py("scripts/check_long.py", *extra)
 
 
+def cmd_folded(args) -> None:
+    _hdr("Folded decoder at longer block lengths, and its BER on real RTL")
+    extra = ["--frames", str(getattr(args, "frames", 200)),
+             "--ber-frames", str(getattr(args, "ber_frames", 20_000))]
+    lengths = getattr(args, "lengths", None)
+    if lengths:
+        extra += ["--lengths", *(str(n) for n in lengths)]
+    if getattr(args, "skip_ber", False):
+        extra += ["--skip-ber"]
+    _py("scripts/check_folded.py", *extra)
+
+
 def cmd_gen(args) -> None:
     _hdr("Generate RTL from rtl/gen/decoder.sv.j2")
     _py("scripts/gen_rtl.py", *(["--check"] if args.check else []))
@@ -336,6 +350,7 @@ def cmd_all(args) -> None:
     cmd_sim(args)
     cmd_sweep(args)
     cmd_long(args)
+    cmd_folded(args)
     cmd_ber(args)
     cmd_synth(args)
     cmd_plots(args)
@@ -369,6 +384,13 @@ def main() -> None:
     lg.add_argument("--frames", type=int, default=200)
     lg.add_argument("--lengths", type=int, nargs="+", metavar="N")
     lg.set_defaults(func=cmd_long)
+
+    fd = sub.add_parser("folded")
+    fd.add_argument("--frames", type=int, default=200)
+    fd.add_argument("--ber-frames", type=int, default=20_000)
+    fd.add_argument("--lengths", type=int, nargs="+", metavar="N")
+    fd.add_argument("--skip-ber", action="store_true")
+    fd.set_defaults(func=cmd_folded)
 
     b = sub.add_parser("ber")
     b.add_argument("--trials", type=int, default=200_000)

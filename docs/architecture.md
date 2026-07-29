@@ -70,6 +70,17 @@ next = (d << 2) | (s >> 1)
 so state `n` is reachable only from `2*(n & 3)` and `2*(n & 3) + 1`. This is
 the transition rule the decoder, the Python model and every figure share.
 
+The encoder running the canonical message, taken from a real Verilator VCD
+rather than a screenshot — `d` shifting through `q`, and the two parities
+appearing on the post-shift register:
+
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="img/encoder_waveform-dark.png">
+    <img src="img/encoder_waveform.png" alt="Encoder waveform" width="880">
+  </picture>
+</p>
+
 ## Decoder
 
 The decoder takes the entire received word in parallel on `dat` and returns the
@@ -112,6 +123,33 @@ to walk back and emit the message: **53 clocks end to end** unterminated, **80**
 terminated. In the terminated variant the first three bits recovered are the
 zero tail and are dropped rather than driven onto `out`.
 
+The schedule as it actually runs — a clean codeword, then the same codeword
+with one bit flipped. `out` settles to the same message in both:
+
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="img/decoder_waveform_clean-dark.png">
+    <img src="img/decoder_waveform_clean.png" alt="Decoder waveform, clean codeword" width="880">
+  </picture>
+  <br><br>
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="img/decoder_waveform_error-dark.png">
+    <img src="img/decoder_waveform_error.png" alt="Decoder waveform with a channel error" width="880">
+  </picture>
+</p>
+
+Because `$dumpvars(0, ...)` reaches the whole hierarchy, the per-stage metrics
+are in the VCD too. Below is `h1..h7.hammingDistances.finalStates[0:7]` — the
+path metric of every state at every trellis stage, read straight out of the
+RTL, with the surviving path from the Python model overlaid:
+
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="img/decoder_metrics-dark.png">
+    <img src="img/decoder_metrics.png" alt="Path metrics per trellis stage" width="840">
+  </picture>
+</p>
+
 **Survivor marking.** Rather than storing survivor pointers, the loser of each
 compare has its branch-metric field overwritten with the sentinel value `3`.
 `getReturnPath()` later reads those sentinels back to reconstruct the path. The
@@ -141,11 +179,21 @@ branch comparisons each, and are barely protected.
 Consequences, all measured rather than asserted:
 
 * Exhaustively, 1536 of 1792 single-bit channel errors are corrected (85.7%),
-  and **every** failure lands on codeword bits 0-3 - see
-  `docs/img/error_correction_heatmap.png`.
+  and **every** failure lands on codeword bits 0-3.
 * Over AWGN the rate-1/2 code spends 3 dB of energy per information bit to buy
   redundancy, and the weak tail means it never earns that back: the as-built
   decoder sits *above* the uncoded BPSK curve at every Eb/N0 simulated.
+
+The first of those is worth seeing rather than reading — 128 messages down
+against 14 error positions across, one cell per decode. The failures are four
+clean vertical bands, not scatter:
+
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="img/error_correction_heatmap-dark.png">
+    <img src="img/error_correction_heatmap.png" alt="Single-bit error correction, 128 messages x 14 positions" width="880">
+  </picture>
+</p>
 
 This is a property of the block framing, not a bug in the ACS or traceback
 logic - those are exactly correct, as the 1920-case equivalence check shows.
@@ -169,6 +217,29 @@ What it buys:
   puts the two side by side.
 * About **2.3 dB at BER = 1e-3** over AWGN *relative to `decoder`*.
 
+The terminated decoder running: twenty received bits, ten trellis stages, and
+no end-state search at all.
+
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="img/decoder_term_waveform-dark.png">
+    <img src="img/decoder_term_waveform.png" alt="Terminated decoder waveform" width="880">
+  </picture>
+</p>
+
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="img/decoder_term_metrics-dark.png">
+    <img src="img/decoder_term_metrics.png" alt="Path metrics with the zero tail" width="880">
+  </picture>
+</p>
+
+That second figure is the clearest picture of what termination does. Message
+`1011011` leaves the trellis in state `110`, and codeword bit 0 is corrupted —
+an error the unterminated decoder gets wrong. The three tail stages walk the
+survivor back down to `000`, which is why traceback can start there without
+searching.
+
 ## How much coding gain is actually available here
 
 The free distance of this code is worth computing rather than quoting. Taking
@@ -180,8 +251,6 @@ For hard-decision Viterbi the asymptotic coding gain over uncoded BPSK is
 
     G_hard = 10 log10(R * d_free / 2)
     G_soft = 10 log10(R * d_free)
-
-and R here is the *effective* rate, which the tail makes much worse than 1/2:
 
 and R here is the *effective* rate, which the tail makes much worse than 1/2.
 The tail is K-1 = 3 bits however long the block is, so it is pure framing
@@ -225,6 +294,25 @@ deeper problem was architectural and has its own section below.
 Second, the largest single improvement still available is soft decision:
 G_soft = 10 log10(0.35 * 6) = +3.2 dB, versus +0.21 dB hard. That is a decoder
 change, not a framing change, and the RTL is hard-decision only.
+
+### On a channel with no rate penalty
+
+All of the above is about AWGN, where the rate penalty is what makes the short
+block lose. On a binary symmetric channel the comparison is against raw
+crossover probability and no energy is spent on redundancy, so the picture is
+friendlier: the decoder helps below p ≈ 0.088 even unterminated.
+
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="img/ber_bsc-dark.png">
+    <img src="img/ber_bsc.png" alt="BER over a binary symmetric channel" width="880">
+  </picture>
+</p>
+
+This is not a kinder way of stating the AWGN result — it is a different
+question. The BSC curve answers "given a fixed bit-flip probability, does
+decoding help", and the AWGN curve answers "given a fixed energy budget, does
+spending some of it on redundancy help". A real link poses the second.
 
 ## Translating a C++ model into hardware
 
@@ -289,6 +377,15 @@ It decodes the identical trellis. `scripts/check_rtl.py` holds it to the same
 2688 exhaustive cases as `decoder_term`, plus 512 random three-error words
 where the tie rule is actually observable, and it agrees with the golden model
 on all 3200.
+
+That is at 7 message bits, which is the length at which the metric
+normalisation does the least work. `scripts/check_folded.py` carries the check
+out to 20, 40 and 100 message bits through `tb/decoder_folded_gen_tb.sv` — the
+same RTL, only the `MSG_BITS` parameter moves, because the folded decoder has
+no per-stage code to re-render the way `rtl/gen/decoder.sv.j2` does. It agrees
+with `model/viterbi_ref.decode_terminated` on every frame at all three lengths,
+which is what makes the 4-bit metric bound an observation rather than an
+argument.
 
 | at 7 message bits / 10 stages | `decoder_term` (unrolled) | `decoder_folded` |
 |---|---|---|
