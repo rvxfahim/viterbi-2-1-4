@@ -139,9 +139,69 @@ def check_decoder_terminated() -> int:
     return rc
 
 
+def check_decoder_folded() -> int:
+    """Cross-check rtl/decoder_folded.sv -- a different architecture, same bits.
+
+    The folded decoder shares no RTL with the unrolled ones: 8 add-compare-
+    select units reused every clock rather than a separate register bank per
+    trellis stage.  So agreement here is not a template reproducing itself, it
+    is two independent implementations of the same trellis landing on the same
+    2688 decodes.
+
+    The 512 rows carrying `error_bit == -2` hold three errors each, beyond the
+    code's correcting power.  They are checked against the model but not
+    against the message: what they test is that the two implementations fail
+    *identically*, which is the only thing that exercises the add-compare-
+    select tie rule.  Single-bit errors never produce a tie.
+    """
+    path = BER_DIR / "rtl_sweep_folded.csv"
+    if not path.exists():
+        print(f"  {YELLOW}SKIP{RESET}  {path.name} missing "
+              f"(run: python scripts/run_all.py sweep)")
+        return 0
+
+    mismatches, uncorrected = [], []
+    total = ties = 0
+    with path.open(newline="") as fh:
+        for row in csv.DictReader(fh):
+            total += 1
+            msg = int(row["message"], 2)
+            rx = int(row["received"], 2)
+            rtl_out = int(row["decoded"], 2)
+            err = int(row["error_bit"])
+            if rtl_out != ref.decode_terminated(rx):
+                mismatches.append((row["message"], err, rtl_out))
+            if err == -2:
+                ties += 1
+            elif rtl_out != msg:
+                uncorrected.append((row["message"], err))
+
+    rc = 0
+    if mismatches:
+        print(f"  {RED}FAIL{RESET}  decoder_folded: {len(mismatches)}/{total} cases "
+              f"where RTL and model disagree")
+        for m, e, r in mismatches[:5]:
+            print(f"          msg={m} err={e:>3}  rtl={r:07b}")
+        rc = 1
+    else:
+        print(f"  {GREEN}PASS{RESET}  decoder_folded: RTL and model agree on all "
+              f"{total} decode cases ({ties} of them 3-error, where the "
+              f"add-compare-select tie rule is observable)")
+
+    if uncorrected:
+        print(f"  {RED}FAIL{RESET}  decoder_folded: {len(uncorrected)}/"
+              f"{total - ties} single-bit errors not corrected")
+        rc = 1
+    else:
+        print(f"  {GREEN}PASS{RESET}  decoder_folded: every single-bit error in "
+              f"all {total - ties} cases corrected")
+    return rc
+
+
 def main() -> None:
     print("Cross-checking RTL against the Python golden model")
-    rc = check_encoder() + check_decoder() + check_decoder_terminated()
+    rc = (check_encoder() + check_decoder() + check_decoder_terminated()
+          + check_decoder_folded())
     if rc:
         raise SystemExit(rc)
 

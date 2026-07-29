@@ -47,11 +47,11 @@ module {{ module }}(clk, reset, dat, out, ready);
   logic low;
   assign high = 1;
   assign low = 0;
-  logic [4:0]steps_n;
-  logic [4:0]stage_n;
+  logic [{{ step_w - 1 }}:0]steps_n;
+  logic [{{ step_w - 1 }}:0]stage_n;
 {% if not terminate %}
-  reg[4:0] temp_states[0:7];
-  reg[4:0] lowest_value;
+  reg[{{ metric_w - 1 }}:0] temp_states[0:7];
+  reg[{{ metric_w - 1 }}:0] lowest_value;
 {% endif %}
   reg[2:0] lowest_index;
   reg [2:0] returned_path;
@@ -60,7 +60,7 @@ module {{ module }}(clk, reset, dat, out, ready);
   byte table_counter;
 
   typedef struct {
-    logic [4:0]finalStates[0:7];
+    logic [{{ metric_w - 1 }}:0]finalStates[0:7];
   } FinalHammingDistance;
 
   typedef struct {
@@ -73,10 +73,10 @@ module {{ module }}(clk, reset, dat, out, ready);
   typedef struct {
     bit recievedSequence[0:1];
 {% for letter in letters %}
-    bit[4:0] {{ letter }}Transition[0:1];
+    bit[{{ metric_w - 1 }}:0] {{ letter }}Transition[0:1];
 {% endfor %}
-    logic [4:0] previousHammingDistance[0:7];
-    logic [4:0] step;
+    logic [{{ metric_w - 1 }}:0] previousHammingDistance[0:7];
+    logic [{{ step_w - 1 }}:0] step;
     FinalHammingDistance hammingDistances;
   } HammingTable;
 
@@ -224,7 +224,7 @@ module {{ module }}(clk, reset, dat, out, ready);
   endtask
 
 
-  function bit[4:0] compute_hamming_distance(input bit data_msb, input bit data_lsb, input bit compare_msb, input bit compare_lsb);
+  function bit[{{ metric_w - 1 }}:0] compute_hamming_distance(input bit data_msb, input bit data_lsb, input bit compare_msb, input bit compare_lsb);
     begin
       if (data_msb != compare_msb && data_lsb!=compare_lsb) begin
         return 2;
@@ -243,7 +243,7 @@ module {{ module }}(clk, reset, dat, out, ready);
   endfunction
 
 
-  function bit[2:0] getReturnPath(input bit [2:0] currentState, input bit [3:0] currentTable);
+  function bit[2:0] getReturnPath(input bit [2:0] currentState, input bit [{{ table_w - 1 }}:0] currentTable);
     begin
       bit[2:0] returnPath;
 {% for table in tables %}

@@ -1,9 +1,8 @@
 # Viterbi (2, 1, 4) — convolutional encoder and decoder in SystemVerilog
 
 A rate-1/2, constraint-length-4 convolutional encoder and a hard-decision
-Viterbi decoder, written in SystemVerilog and now built, simulated, verified,
-synthesised and plotted with **an entirely open-source toolchain** — no vendor
-licence anywhere in the flow.
+Viterbi decoder in SystemVerilog, simulated, verified, synthesised and plotted
+with an entirely open-source toolchain.
 
 <p align="center">
   <picture>
@@ -12,13 +11,6 @@ licence anywhere in the flow.
   </picture>
 </p>
 
-```
-  message ──► encoder ──► channel ──► decoder ──► message
-   7 bits     d_ff.sv     BSC/AWGN   decoder.sv    7 bits
-                 │                        │
-            14-bit codeword         45 + 8 clocks
-```
-
 | | |
 |---|---|
 | Rate | 1/2 |
@@ -26,25 +18,11 @@ licence anywhere in the flow.
 | Generators | g1 = `1111` (17₈), g0 = `1011` (13₈) |
 | Decision | hard |
 
-Two decoders are built from one template, differing only in block framing —
-same code, same generators, byte-identical encoder:
-
-| | `decoder` | `decoder_term` |
-|---|---|---|
-| Block | 7 bits → 14 code bits | 7 bits + 3 zero tail → 20 code bits |
-| Effective rate | 0.50 | 0.35 |
-| Latency | 45 + 8 clocks | 69 + 11 clocks |
-| **Single-bit errors corrected** | 1536/1792 (85.7%) | **2560/2560 (100%)** |
-| iCE40 UP5K | 1810/5280 cells (34%), ~13 MHz | 2356/5280 cells (44%), ~27 MHz |
-
-`decoder` is the original assignment's framing and the one the published
-waveforms show; `decoder_term` is what the code should have been framed as.
-
 ---
 
 ## Quickstart
 
-You need **Docker** and **Python 3.10+**. Everything else is optional.
+You need **Docker** and **Python 3.10+**.
 
 ```bash
 git clone https://github.com/rvxfahim/viterbi-2-1-4
@@ -55,7 +33,7 @@ python scripts/run_all.py env      # what's available
 python scripts/run_all.py all      # simulate, verify, sweep, plot
 ```
 
-`all` ends with every figure in `docs/img/` and every dataset in `results/`.
+`all` writes every figure into `docs/img/` and every dataset into `results/`.
 Individual stages:
 
 ```bash
@@ -63,7 +41,8 @@ python scripts/run_all.py gen      # regenerate the RTL from its Jinja template
 python scripts/run_all.py model    # Python golden model self-test
 python scripts/run_all.py cpp      # C++ reference model vs the golden model
 python scripts/run_all.py sim      # RTL simulation + self-checking benches
-python scripts/run_all.py sweep    # exhaustive correctness sweeps, both variants
+python scripts/run_all.py sweep    # exhaustive correctness sweeps
+python scripts/run_all.py long     # generated RTL at 20 and 40 message bits
 python scripts/run_all.py ber      # Monte-Carlo BER study
 python scripts/run_all.py synth    # Yosys + nextpnr   (needs OSS CAD Suite)
 python scripts/run_all.py plots    # regenerate all figures
@@ -75,9 +54,48 @@ installed to a path with no spaces; the script finds it automatically.
 
 ---
 
-## How it works
+## Where things are
 
-### The encoder
+```
+rtl/
+  d_ff.sv                                      the encoder
+  decoder.sv  decoder_term.sv                  GENERATED -- do not edit
+  decoder_folded.sv                            folded, hand-written, any length
+  gen/decoder.sv.j2                            the template they come from
+  legacy/decoder.sv                            the 2022 hand-written decoder
+tb/
+  decoder_bench.sv                             self-checking, plusarg-driven
+  encoder_bench.sv                             all 128 messages -> CSV
+  system_tb.sv                                 end-to-end 1920-case sweep
+  system_term_tb.sv                            terminated, 2688-case sweep
+  system_folded_tb.sv                          folded, 2688 + 512 3-error cases
+  decoder_gen_tb.sv                            any block length, -GMSG_BITS=N
+  legacy/                                      the 2022 testbenches, verbatim
+model/
+  viterbi_ref.py                               bit-accurate golden model
+  ber_sweep.py                                 vectorised Monte-Carlo BER
+  cpp/                                         C++ reference model, file-driven
+scripts/
+  run_all.py                                   the only entry point you need
+  gen_rtl.py                                   renders the RTL from the template
+  vl.py                                        Verilator-in-Docker driver
+  synth.py                                     Yosys + nextpnr + netlistsvg
+  check_rtl.py  check_cpp.py                   RTL / C++ vs model equivalence
+  check_long.py                                generated RTL at 20 / 40 bits
+  plot_waves.py, plot_ber.py, plot_trellis.py  figures
+  plot_area.py                                 area against block length
+  vizstyle.py                                  shared light/dark plot theme
+docs/
+  architecture.md  bitorder.md                 how it works
+  known-issues.md  toolchain.md                what to watch out for
+  img/                                         generated figures
+  legacy/                                      original PDFs, slides, truth table
+results/            vcd/  synth/  ber/         generated data
+```
+
+---
+
+## The encoder
 
 Four-tap shift register; the two parities are taken from the post-shift
 register. With the pre-shift state written `s = (q0, q1, q2)`:
@@ -92,27 +110,57 @@ next = (d << 2) | (s >> 1)
   <img src="docs/img/encoder_schematic.svg" alt="Encoder netlist" width="700">
 </p>
 
-### The decoder
+`rtl/d_ff.sv` is the same file in every flow below.
 
-The decoder takes the whole received word in parallel and runs **one
-add-compare-select butterfly per clock edge**, sequenced by `steps_n` (trellis
-stage) and `stage_n` (state within the stage). One `HammingTable` struct per
-stage holds the metrics. Instead of storing survivor pointers, the loser of each
-compare has its branch-metric field overwritten with the sentinel `3`, and
-traceback reads those sentinels back.
+---
 
-**The RTL is generated.** `rtl/decoder.sv` and `rtl/decoder_term.sv` both come
-from `rtl/gen/decoder.sv.j2` via `scripts/gen_rtl.py`. The original was written
-out by hand — 1317 lines for seven stages — and extending that to ten by hand
-meant ~600 more lines of near-identical ladder with a mistyped `high`/`low`
-waiting in it. The template derives every branch's expected output pair from the
-generator polynomials instead. Edit the template, not the `.sv` files;
-`run_all.py gen --check` fails if they have drifted.
+## The decoder, and why there are two of them
 
-That the template *reproduces* the hand-written decoder rather than merely
-resembling it is not taken on faith: the generated seven-stage decoder passes
-the same 1920-case equivalence check against the Python model that the original
-does, and `rtl/legacy/decoder.sv` is kept so the two can be diffed.
+### The transliterated design
+
+The original decoder (`rtl/decoder.sv`, and its zero-tail-terminated sibling
+`rtl/decoder_term.sv`) was written by porting the C++ reference model
+structure for structure. That model keeps one `HammingTable` object per trellis
+stage and walks the eight states of each with a switch over cases `a..h`. In
+SystemVerilog that became:
+
+* one register bank per trellis stage — `h1..h7` — so the whole trellis sits on
+  the die at once;
+* the switch over states became a sequencer, one add-compare-select per clock.
+
+That is valid, working hardware — it is exhaustively verified against the
+Python model — but it is unrolled in space *and* serialised in time, so it pays
+the area of a parallel design and the throughput of a serial one. It costs
+about **350 LUT4 per trellis stage**, which means the block length is capped by
+the FPGA: an iCE40 UP5K runs out at roughly 17 message bits.
+
+The RTL is generated from `rtl/gen/decoder.sv.j2` by `scripts/gen_rtl.py`,
+because writing out seven stages by hand took 1317 lines and ten stages would
+have taken ~600 more of near-identical ladder logic. Edit the template, not the
+`.sv` files; `run_all.py gen --check` fails if they have drifted.
+
+### The hardware-friendly design
+
+`rtl/decoder_folded.sv` decodes the same trellis and returns the same bits from
+a different architecture. In hardware, a software loop over an array splits
+into time (the loop) and space (the array), and the designer chooses the trade.
+The folded decoder chooses:
+
+* **the loop → reuse over time.** One set of eight add-compare-select units,
+  all eight evaluated in parallel, retiring one trellis stage per clock. That
+  is `STAGES` clocks instead of `8 × STAGES`.
+* **the array → memory.** Eight path-metric registers that are reused rather
+  than replicated, plus one byte of survivor decisions per stage.
+
+The path metrics are renormalised each stage by subtracting the stage minimum,
+which keeps them 4 bits wide no matter how long the block is. Everything except
+the survivor memory and the parallel input register is therefore constant in
+block length — and both of those are memory, not logic.
+
+It is hand-written rather than generated, because the whole point is that it
+needs no per-stage code at all. It is held to the same 2688 exhaustive cases as
+`decoder_term`, plus 512 random three-error words, and agrees with the golden
+model on all 3200.
 
 Full detail — tie-breaking rules, the cycle schedule, the critical path — is in
 **[docs/architecture.md](docs/architecture.md)**. Before wiring anything up,
@@ -122,35 +170,12 @@ read **[docs/bitorder.md](docs/bitorder.md)**.
 
 ## Results
 
-### Waveforms
+### The original decoder, from the inside
 
-Regenerated from real Verilator VCDs, replacing the 2022 ModelSim screenshots.
-
-<p align="center">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="docs/img/encoder_waveform-dark.png">
-    <img src="docs/img/encoder_waveform.png" alt="Encoder waveform" width="880">
-  </picture>
-  <br><br>
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="docs/img/decoder_waveform_clean-dark.png">
-    <img src="docs/img/decoder_waveform_clean.png" alt="Decoder waveform, clean codeword" width="880">
-  </picture>
-  <br><br>
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="docs/img/decoder_waveform_error-dark.png">
-    <img src="docs/img/decoder_waveform_error.png" alt="Decoder waveform with a channel error" width="880">
-  </picture>
-</p>
-
-### Inside the decoder
-
-The original flow could never show this. Both legacy testbenches call
-`$dumpvars(1)`, which dumps only top-level signals — but Verilator dumps the
-whole hierarchy regardless, so all 288 signals including
-`h1..h7.hammingDistances.finalStates[0:7]` reach the VCD. Below is the path
-metric of every state at every trellis stage, read straight out of the RTL,
-with the surviving path from the Python model overlaid.
+Path metric of every state at every trellis stage, read straight out of the
+RTL's VCD, with the surviving path from the Python model overlaid. This is the
+Viterbi algorithm itself: eight running metrics, one survivor per state per
+stage, and the traceback that reads them back.
 
 <p align="center">
   <picture>
@@ -159,35 +184,77 @@ with the surviving path from the Python model overlaid.
   </picture>
 </p>
 
-The terminated decoder, same view — twenty received bits, ten trellis stages,
-and no end-state search at all:
+Terminating the block with `K-1 = 3` zero bits pins the survivor's end state at
+`000`, so traceback starts there instead of searching all eight states. That
+takes single-bit error correction from 1536/1792 (85.7%) to 2560/2560 (100%),
+and is worth 2.3 dB.
 
 <p align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="docs/img/decoder_term_waveform-dark.png">
-    <img src="docs/img/decoder_term_waveform.png" alt="Terminated decoder waveform" width="880">
+    <source media="(prefers-color-scheme: dark)" srcset="docs/img/error_correction_compare-dark.png">
+    <img src="docs/img/error_correction_compare.png" alt="Single-bit error correction, terminated vs not" width="880">
   </picture>
 </p>
+
+### Error rate
 
 <p align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="docs/img/decoder_term_metrics-dark.png">
-    <img src="docs/img/decoder_term_metrics.png" alt="Path metrics with the zero tail" width="880">
+    <source media="(prefers-color-scheme: dark)" srcset="docs/img/ber_awgn-dark.png">
+    <img src="docs/img/ber_awgn.png" alt="BER vs Eb/N0 over AWGN" width="880">
   </picture>
 </p>
 
-That last figure is the clearest picture of what termination does. Message
-`1011011` leaves the trellis in state `110`, and codeword bit 0 is corrupted —
-an error the unterminated decoder gets wrong. The three tail stages walk the
-survivor back down to `000`, which is why traceback can start there without
-searching.
+Against uncoded BPSK the terminated decoder wins by only +0.2 dB at BER = 1e-4,
+which is the textbook result for this configuration: three tail bits on a 7-bit
+block drop the effective rate to 0.35, and `10 log10(0.35 · 6 / 2)` = +0.21 dB.
+The tail is 3 bits however long the block is, so a longer block gets most of the
+code's gain back — +1.54 dB at 100 message bits. The RTL is hard-decision only;
+soft decision would be worth about 3.2 dB more.
+
+### The folded decoder scales
+
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/img/area_blocklen-dark.png">
+    <img src="docs/img/area_blocklen.png" alt="Logic area against block length, unrolled vs folded" width="880">
+  </picture>
+</p>
+
+~350 LUT4 per trellis stage against ~15. The transliterated decoder's area
+grows with the block length until it does not fit; the folded one barely moves.
+
+| message bits | unrolled LUT4 | folded LUT4 |
+|---|---|---|
+| 7 | 1936 | 421 |
+| 20 | 6098 — over device | 622 |
+| 40 | 13565 — over device | 983 |
+| 100 | — | 1823 |
+
+### Synthesis
+
+Yosys 0.67 `read_slang` plus nextpnr-ice40, targeting a Lattice iCE40 UP5K in
+SG48, on the canonical 7-bit block:
+
+| | `decoder` | `decoder_term` | `decoder_folded` |
+|---|---|---|---|
+| Logic cells | 1810 / 5280 (34%) | 2356 / 5280 (44%) | **627 / 5280 (11%)** |
+| LUT4 / carry / flops | 1338 / 511 / 497 | 1936 / 799 / 703 | 421 / 142 / 210 |
+| Fmax | ~13 MHz | ~27 MHz | ~11 MHz |
+| Clocks per block | 53 | 80 | **20** |
+| Throughput | 1.70 Mbit/s | 2.37 Mbit/s | **3.95 Mbit/s** |
+
+The folded decoder is 3.8× smaller and 1.7× faster in throughput despite the
+lowest clock of the three, because it needs a quarter of the clocks for the
+same trellis. Its low Fmax is its own weak point: a whole stage — eight
+butterflies, the eight-way minimum, the normalising subtract — sits in one
+combinational path, which pipelining would shorten.
 
 ### Correctness
 
-Both decoders are driven end to end from the encoder, for **every message ×
-every single-bit error position**, and every case is cross-checked against the
-independent Python model. 4608 decodes in total, and the terminated variant is
-held to an absolute standard rather than merely to agreement:
+Every decoder is driven end to end from the encoder for **every message × every
+single-bit error position**, and every case is cross-checked against the
+independent Python model.
 
 ```
 decoder      -- 128 messages x 15 channels  (14-bit, unterminated)
@@ -200,180 +267,25 @@ decoder_term -- 128 messages x 21 channels  (20-bit, terminated)
 PASS  encoder: all 128 RTL codewords match model/viterbi_ref.encode()
 PASS  decoder: RTL and model agree on all 1920 decode cases
 PASS  decoder_term: RTL and model agree on all 2688 decode cases
-PASS  decoder_term: every single-bit error in all 2688 cases corrected
+PASS  decoder_folded: RTL and model agree on all 3200 decode cases
 ```
 
-<p align="center">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="docs/img/error_correction_compare-dark.png">
-    <img src="docs/img/error_correction_compare.png" alt="Single-bit error correction, terminated vs not" width="880">
-  </picture>
-</p>
-
-The 85.7% was never a decoder bug — the ACS and traceback logic are exactly
-correct. Every failure lands on codeword bits 0–3, because the 7-bit block is
-not flushed with `K-1 = 3` zero bits, so the last two message bits are decided
-by only one or two branch comparisons each. Clocking three zeros in after the
-message pins the survivor's end state, and a (2,1,4) code with free distance 6
-then corrects **every** single error, anywhere in the block.
-
-Note what did *not* change to get there: the encoder. `rtl/d_ff.sv` is
-byte-identical between the two flows — terminating is something the transmitter
-does, not the encoder.
-
-### Error-rate performance
-
-<p align="center">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="docs/img/ber_awgn-dark.png">
-    <img src="docs/img/ber_awgn.png" alt="BER vs Eb/N0 over AWGN" width="880">
-  </picture>
-</p>
-
-**As originally framed, this decoder is worse than not coding at all.** A
-rate-1/2 code spends 3 dB of energy per information bit buying redundancy, and
-an unterminated 7-bit block never earns it back. Terminating the trellis is
-worth **2.3 dB at BER = 1e-3** against `decoder`.
-
-But measured against *uncoded BPSK*, `decoder_term` only just wins, and only
-at high SNR:
-
-| | uncoded | `decoder_term` | |
-|---|---|---|---|
-| below 6.4 dB | | | terminated is **worse** |
-| BER = 1e-3 | 6.84 dB | 6.79 dB | +0.05 dB |
-| BER = 1e-4 | 8.36 dB | 8.16 dB | +0.20 dB |
-| BER = 1e-5 | 9.58 dB | 9.17 dB | +0.41 dB |
-
-That is not a disappointing result, it is the textbook one. This code has
-free distance 6 (computed, not quoted — see the search in
-`docs/architecture.md`), so its asymptotic hard-decision coding gain is
-`10 log10(R · d_free / 2)`. Three tail bits on a 7-bit block drop the rate to
-7/20 = 0.35, a 4.56 dB energy penalty, which leaves
-`10 log10(0.35 · 6 / 2) = +0.21 dB`. The simulation converges on exactly that.
-
-**The block is simply too short.** The tail is 30% overhead here. The same RTL
-on a longer block gets most of the code's gain back — +1.15 dB at 20 message
-bits, +1.63 dB at 100 — and soft decision, worth `10 log10(R · d_free)` ≈ 3.2 dB,
-is where the real win is. The RTL is hard-decision only.
-
-On a binary symmetric channel, where no rate penalty applies, the picture is
-friendlier — the decoder helps below p ≈ 0.088:
-
-<p align="center">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="docs/img/ber_bsc-dark.png">
-    <img src="docs/img/ber_bsc.png" alt="BER over a binary symmetric channel" width="880">
-  </picture>
-</p>
-
-Curves come from `model/ber_sweep.py`, a NumPy-vectorised re-implementation of
-the same trellis, validated frame-by-frame against `model/viterbi_ref.py`. The
-simulated uncoded curve sits on the analytic `Q(√(2Eb/N0))` line across four
-decades, which is what validates the channel model before any coding claim is
-made.
-
-### Synthesis
-
-Yosys 0.67 `read_slang` (the built-in Verilog reader cannot parse this design)
-plus nextpnr-ice40, targeting a Lattice iCE40 UP5K in SG48:
-
-| | `decoder` | `decoder_term` |
-|---|---|---|
-| Logic cells | 1810 / 5280 (34%) | 2356 / 5280 (44%) |
-| LUT4 / carry / flops | 1338 / 511 / 497 | 1936 / 799 / 703 |
-| Fmax | ~13 MHz | ~27 MHz |
-| Critical path | 77.7 ns, 60 hops | 36.9 ns, 14 hops |
-
-The terminated decoder being 30% larger is expected — three more trellis stages.
-Its being **twice as fast** is less obvious, and the timing report gives a clear
-answer: in both designs the critical path ends at `lowest_index`, i.e. in the
-eight-way minimum-over-end-states search. Because the decoder is one `always`
-block using blocking assignments, that search is chained combinationally onto
-metrics computed earlier in the same clock edge. `decoder_term` has no search at
-all — a terminated trellis knows the survivor ends in state 0 — and the path
-drops from 60 hops to 14.
-
-The obvious next step for the unterminated decoder is therefore to register the
-end-state search rather than fold it into the same edge, at the cost of one
-clock of latency. Fmax moves by roughly ±0.5 MHz between placer seeds.
-
----
-
-## Repository map
-
-```
-rtl/
-  d_ff.sv                                      the encoder, unmodified
-  decoder.sv  decoder_term.sv                  GENERATED -- do not edit
-  gen/decoder.sv.j2                            the template they come from
-  legacy/decoder.sv                            the 2022 hand-written decoder
-tb/
-  decoder_bench.sv                             self-checking, plusarg-driven
-  encoder_bench.sv                             all 128 messages -> CSV
-  system_tb.sv                                 end-to-end 1920-case sweep
-  system_term_tb.sv                            terminated, 2688-case sweep
-  legacy/                                      the 2022 testbenches, verbatim
-model/
-  viterbi_ref.py                               bit-accurate golden model
-  ber_sweep.py                                 vectorised Monte-Carlo BER
-  cpp/                                         the author's C++ reference, file-driven
-scripts/
-  run_all.py                                   the only entry point you need
-  gen_rtl.py                                   renders the RTL from the template
-  vl.py                                        Verilator-in-Docker driver
-  synth.py                                     Yosys + nextpnr + netlistsvg
-  check_rtl.py  check_cpp.py                   RTL / C++ vs model equivalence
-  plot_waves.py, plot_ber.py, plot_trellis.py  figures
-  vizstyle.py                                  shared light/dark plot theme
-docs/
-  architecture.md  bitorder.md                 how it works
-  known-issues.md  toolchain.md                what to watch out for
-  img/                                         generated figures
-  legacy/                                      original PDFs, slides, truth table
-results/            vcd/  synth/  ber/         generated data
-```
-
----
-
-## Design notes
-
-The open-source flow surfaced four real defects. Three are fixed, one was fatal
-to the design's whole premise, and the original code is preserved so every one
-of them can still be reproduced:
-
-* **`counter_for_path` was never cleared on reset**, so the decoder worked
-  exactly once per power-on. The sweep used to zero it through a cross-module
-  reference; it now runs 1920 decodes back to back with nothing but `reset`
-  between them, which is what proves the fix.
-* **The traceback block ran during reset** — harmless only because the
-  testbenches happened to hold `ready` low.
-* **No zero-tail termination**, which is why the design lost to uncoded BPSK.
-  `decoder_term` fixes it and corrects every single-bit error.
-* **The C++ model returned a path metric where a state index belonged**, in
-  `getFinalLowestState()`. Invisible on an error-free word — metric 0, state 0 —
-  which is exactly why the canonical demo printed the right answer for years.
-  It cost 12.5 points of correction rate. The RTL never had this bug.
-
-Everything is measured against `model/viterbi_ref.py` rather than asserted, and
-the full write-up is in **[docs/known-issues.md](docs/known-issues.md)**.
-
-`rtl/legacy/decoder.sv` is the 2022 hand-written decoder, kept verbatim so the
-generated version can be diffed against it. The two legacy testbenches are
-preserved byte-for-byte too, because they are the benches the published
-waveforms came from; the benches in `tb/` are what regression actually runs.
+Known defects found and fixed along the way are written up in
+**[docs/known-issues.md](docs/known-issues.md)**. `rtl/legacy/` and `tb/legacy/`
+keep the 2022 hand-written decoder and its testbenches verbatim, so the
+generated version can be diffed against them.
 
 ---
 
 ## Why these tools
 
-The decoder is built on **unpacked** structs containing unpacked arrays.
-They cannot be made `packed`, and that single fact decides the toolchain:
-Verilator and Yosys' slang front end handle them, while Icarus Verilog and
-Yosys' built-in Verilog reader reject them outright. Verilator additionally has
-no working native-Windows build, so it runs in a pinned container.
+The decoder is built on **unpacked** structs containing unpacked arrays. They
+cannot be made `packed`, and that single fact decides the toolchain: Verilator
+and Yosys' slang front end handle them, while Icarus Verilog and Yosys'
+built-in Verilog reader reject them outright. Verilator has no working
+native-Windows build, so it runs in a pinned container.
 
-The full reasoning, exact command lines and version matrix are in
+Exact command lines and the version matrix are in
 **[docs/toolchain.md](docs/toolchain.md)**.
 
 ---

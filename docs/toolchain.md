@@ -106,6 +106,23 @@ decoders cannot disagree by typo. Correctness is not taken on faith: the
 generated seven-stage decoder is held to the same 1920-case equivalence check
 against `model/viterbi_ref.py` that the hand-written original passes.
 
+Field widths come from `gen_rtl.widths()` rather than being literals, so a
+longer block widens `steps_n`, the path metrics and `getReturnPath`'s table
+index as it needs to. They are floored at the original values, which is what
+keeps the two checked-in decoders byte-identical to what was published.
+
+    python scripts/gen_rtl.py --msg-bits 20 --out sim/scratch/d20.sv
+    python scripts/run_all.py long          # build and check 20 and 40 bits
+
+`rtl/decoder_folded.sv` is *not* generated. It is a folded architecture with
+one add-compare-select array reused per stage, so it needs no per-stage code —
+`MSG_BITS` is an ordinary module parameter. Yosys takes it via slang:
+
+    yosys -p "read_slang --top decoder_folded -G MSG_BITS=20 rtl/decoder_folded.sv; ..."
+
+and Verilator via `-GMSG_BITS=20`, which is how `tb/decoder_gen_tb.sv` drives
+one bench across several block lengths.
+
 ## Plotting
 
 `vcdvcd` reads the VCDs; matplotlib draws everything. Verilator writes vector

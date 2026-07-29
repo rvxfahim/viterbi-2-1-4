@@ -99,7 +99,7 @@ public:
             TRACE("executing case b" << endl);
             bTransition[0] = this->calculateDistanceForTransition(1, 1, this->previousHammingDistance[1]);
             bTransition[1] = this->calculateDistanceForTransition(0, 0, this->previousHammingDistance[1]);
-            if (bTransition[0] < hammingDistances.finalStates[0]) {
+            if (bTransition[0] <= hammingDistances.finalStates[0]) {  // <= : on a tie the high predecessor wins, as the RTL does
                 hammingDistances.finalStates[0] = bTransition[0];
                 aTransition[0] = -1;
             }
@@ -107,7 +107,7 @@ public:
             {
                 bTransition[0] = -1;
             }
-            if (bTransition[1] < hammingDistances.finalStates[4]) {
+            if (bTransition[1] <= hammingDistances.finalStates[4]) {  // <= : on a tie the high predecessor wins, as the RTL does
                 hammingDistances.finalStates[4] = bTransition[1];
                 aTransition[1] = -1;
             }
@@ -128,7 +128,7 @@ public:
             TRACE("executing case d" << endl);
             dTransition[0] = this->calculateDistanceForTransition(0, 1, this->previousHammingDistance[3]);
             dTransition[1] = this->calculateDistanceForTransition(1, 0, this->previousHammingDistance[3]);
-            if (dTransition[0] < hammingDistances.finalStates[1]) {
+            if (dTransition[0] <= hammingDistances.finalStates[1]) {  // <= : on a tie the high predecessor wins, as the RTL does
                 hammingDistances.finalStates[1] = dTransition[0];
                 cTransition[0] = -1;
             }
@@ -136,7 +136,7 @@ public:
             {
                 dTransition[0] = -1;
             }
-            if (dTransition[1] < hammingDistances.finalStates[5]) {
+            if (dTransition[1] <= hammingDistances.finalStates[5]) {  // <= : on a tie the high predecessor wins, as the RTL does
                 hammingDistances.finalStates[5] = dTransition[1];
                 cTransition[1] = -1;
             }
@@ -156,7 +156,7 @@ public:
             TRACE("executing case f" << endl);
             fTransition[0] = this->calculateDistanceForTransition(0, 0, this->previousHammingDistance[5]);
             fTransition[1] = this->calculateDistanceForTransition(1, 1, this->previousHammingDistance[5]);
-            if (fTransition[0] < hammingDistances.finalStates[2]) {
+            if (fTransition[0] <= hammingDistances.finalStates[2]) {  // <= : on a tie the high predecessor wins, as the RTL does
                 hammingDistances.finalStates[2] = fTransition[0];
                 eTransition[0] = -1;
             }
@@ -164,7 +164,7 @@ public:
             {
                 fTransition[0] = -1;
             }
-            if (fTransition[1] < hammingDistances.finalStates[6]) {
+            if (fTransition[1] <= hammingDistances.finalStates[6]) {  // <= : on a tie the high predecessor wins, as the RTL does
                 hammingDistances.finalStates[6] = fTransition[1];
                 eTransition[1] = -1;
             }
@@ -184,7 +184,7 @@ public:
             TRACE("executing case h" << endl);
             hTransition[0] = this->calculateDistanceForTransition(1, 0, this->previousHammingDistance[7]);
             hTransition[1] = this->calculateDistanceForTransition(0, 1, this->previousHammingDistance[7]);
-            if (hTransition[0] < hammingDistances.finalStates[3]) {
+            if (hTransition[0] <= hammingDistances.finalStates[3]) {  // <= : on a tie the high predecessor wins, as the RTL does
                 TRACE("replacing d with hTransition[0] " << hTransition[0] << endl);
                 hammingDistances.finalStates[3] = hTransition[0];
                 gTransition[0] = -1;
@@ -193,7 +193,7 @@ public:
             {
                 hTransition[0] = -1;
             }
-            if (hTransition[1] < hammingDistances.finalStates[7]) {
+            if (hTransition[1] <= hammingDistances.finalStates[7]) {  // <= : on a tie the high predecessor wins, as the RTL does
                 hammingDistances.finalStates[7] = hTransition[1];
                 gTransition[1] = -1;
             }

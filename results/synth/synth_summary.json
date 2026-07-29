@@ -244,5 +244,188 @@
       "critical_path_ns": 29.83
     }
   },
+  "decoder_folded": {
+    "cells": {
+      "$add": 33,
+      "$bmux": 1,
+      "$buf": 2,
+      "$bwmux": 1,
+      "$demux": 1,
+      "$dff": 8,
+      "$eq": 10,
+      "$ge": 1,
+      "$logic_and": 18,
+      "$logic_not": 13,
+      "$logic_or": 8,
+      "$lt": 19,
+      "$memrd_v2": 17,
+      "$memwr_v2": 27,
+      "$mux": 172,
+      "$not": 16,
+      "$or": 8,
+      "$sub": 10,
+      "$_MUX_": 316,
+      "$_OR_": 55,
+      "$_AND_": 109,
+      "$_NOT_": 127,
+      "$specify2": 8,
+      "$_ORNOT_": 10,
+      "$_XOR_": 6,
+      "SB_DFFE": 76,
+      "SB_DFFSR": 3,
+      "SB_DFFSS": 2,
+      "SB_DFFESR": 98,
+      "SB_DFFESS": 31,
+      "SB_CARRY": 142,
+      "SB_LUT4": 421
+    },
+    "pnr": {
+      "device": "Lattice iCE40 UP5K (SG48)",
+      "utilisation": {
+        "ICESTORM_LC": {
+          "used": 627,
+          "total": 5280,
+          "percent": 11
+        },
+        "ICESTORM_RAM": {
+          "used": 0,
+          "total": 30,
+          "percent": 0
+        },
+        "SB_IO": {
+          "used": 30,
+          "total": 39,
+          "percent": 76
+        },
+        "SB_GB": {
+          "used": 2,
+          "total": 8,
+          "percent": 25
+        },
+        "ICESTORM_PLL": {
+          "used": 0,
+          "total": 1,
+          "percent": 0
+        },
+        "SB_WARMBOOT": {
+          "used": 0,
+          "total": 1,
+          "percent": 0
+        },
+        "ICESTORM_DSP": {
+          "used": 0,
+          "total": 8,
+          "percent": 0
+        },
+        "ICESTORM_HFOSC": {
+          "used": 0,
+          "total": 1,
+          "percent": 0
+        },
+        "ICESTORM_LFOSC": {
+          "used": 0,
+          "total": 1,
+          "percent": 0
+        },
+        "SB_I2C": {
+          "used": 0,
+          "total": 2,
+          "percent": 0
+        },
+        "SB_SPI": {
+          "used": 0,
+          "total": 2,
+          "percent": 0
+        },
+        "IO_I3C": {
+          "used": 0,
+          "total": 2,
+          "percent": 0
+        },
+        "SB_LEDDA_IP": {
+          "used": 0,
+          "total": 1,
+          "percent": 0
+        },
+        "SB_RGBA_DRV": {
+          "used": 0,
+          "total": 1,
+          "percent": 0
+        },
+        "ICESTORM_SPRAM": {
+          "used": 0,
+          "total": 4,
+          "percent": 0
+        }
+      },
+      "fmax_mhz": 11.28,
+      "critical_path_ns": 22.92
+    }
+  },
+  "block_sweep": [
+    {
+      "arch": "unrolled",
+      "msg_bits": 7,
+      "stages": 10,
+      "lut4": 1936,
+      "flops": 703,
+      "ram": 0,
+      "fits_up5k": true
+    },
+    {
+      "arch": "unrolled",
+      "msg_bits": 20,
+      "stages": 23,
+      "lut4": 6098,
+      "flops": 2101,
+      "ram": 0,
+      "fits_up5k": false
+    },
+    {
+      "arch": "unrolled",
+      "msg_bits": 40,
+      "stages": 43,
+      "lut4": 13565,
+      "flops": 4714,
+      "ram": 0,
+      "fits_up5k": false
+    },
+    {
+      "arch": "folded",
+      "msg_bits": 7,
+      "stages": 10,
+      "lut4": 421,
+      "flops": 210,
+      "ram": 0,
+      "fits_up5k": true
+    },
+    {
+      "arch": "folded",
+      "msg_bits": 20,
+      "stages": 23,
+      "lut4": 622,
+      "flops": 380,
+      "ram": 0,
+      "fits_up5k": true
+    },
+    {
+      "arch": "folded",
+      "msg_bits": 40,
+      "stages": 43,
+      "lut4": 983,
+      "flops": 699,
+      "ram": 0,
+      "fits_up5k": true
+    },
+    {
+      "arch": "folded",
+      "msg_bits": 100,
+      "stages": 103,
+      "lut4": 1823,
+      "flops": 1394,
+      "ram": 0,
+      "fits_up5k": true
+    }
+  ],
   "schematic": true
 }

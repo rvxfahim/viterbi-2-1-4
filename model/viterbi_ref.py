@@ -63,6 +63,18 @@ CANONICAL_MSG = 0b1011000
 CANONICAL_CW = 0b11110111010111
 CANONICAL_ERROR_BIT = 6      # the bit tb/legacy/decoder_tb.sv deliberately flips
 
+#: Terminated 20-bit words carrying three errors, chosen so the ACS hits a
+#: metric tie whose resolution changes the decoded message.  The expected
+#: outputs were read out of rtl/decoder_term.sv in simulation, not derived from
+#: this model -- see self_test() and docs/known-issues.md #6.
+TIE_BREAK_WORDS = (
+    "00001111000111001011",
+    "00111110010011101111",
+    "11111000001001100000",
+    "00110001010111010111",
+)
+TIE_BREAK_EXPECTED = ("0001101", "0100111", "1001111", "0101011")
+
 
 # ---------------------------------------------------------------------------
 # Trellis
@@ -149,17 +161,21 @@ def decode_bits(received: list[int], *, trace: bool = False,
         for state in range(N_STATES):
             lo, hi = predecessors(state)
             bit = state >> 2                     # the input bit implied by `state`
-            best_pred, best_metric = None, _INF
-            for pred in (lo, hi):
-                if metrics[pred] >= _INF:
-                    continue
-                _, o1, o0 = TRANSITIONS[pred][bit]
-                cand = metrics[pred] + (o1 ^ r1) + (o0 ^ r0)
-                # strict `<` mirrors the RTL: on a tie the higher pred wins
-                if best_pred is None or cand < best_metric:
-                    best_pred, best_metric = pred, cand
-            new[state] = best_metric
-            surv[state] = best_pred if best_pred is not None else lo
+            cand_lo = cand_hi = _INF
+            if metrics[lo] < _INF:
+                _, o1, o0 = TRANSITIONS[lo][bit]
+                cand_lo = metrics[lo] + (o1 ^ r1) + (o0 ^ r0)
+            if metrics[hi] < _INF:
+                _, o1, o0 = TRANSITIONS[hi][bit]
+                cand_hi = metrics[hi] + (o1 ^ r1) + (o0 ^ r0)
+            # Structured exactly like the RTL's compare (decoder.sv.j2:132) and
+            # ber_sweep.py:108: the low predecessor is taken only on a strict
+            # `<`, so a tie falls through to the high one.  Writing this as a
+            # loop over (lo, hi) that replaces on `<` inverts the tie and is
+            # what this function used to do -- see docs/known-issues.md #6.
+            take_lo = cand_lo < cand_hi or cand_hi >= _INF
+            new[state] = cand_lo if take_lo else cand_hi
+            surv[state] = lo if take_lo else hi
         metrics = new
         survivors.append(surv)
         history.append(metrics[:])
@@ -206,18 +222,17 @@ def decode_soft(llrs: list[float]) -> list[int]:
         for state in range(N_STATES):
             lo, hi = predecessors(state)
             bit = state >> 2
-            best_pred, best_metric = None, float(_INF)
-            for pred in (lo, hi):
-                if metrics[pred] >= _INF:
-                    continue
-                _, o1, o0 = TRANSITIONS[pred][bit]
-                cand = (metrics[pred]
-                        + (l1 if o1 else -l1)
-                        + (l0 if o0 else -l0))
-                if best_pred is None or cand < best_metric:
-                    best_pred, best_metric = pred, cand
-            new[state] = best_metric
-            surv[state] = best_pred if best_pred is not None else lo
+            cand_lo = cand_hi = float(_INF)
+            if metrics[lo] < _INF:
+                _, o1, o0 = TRANSITIONS[lo][bit]
+                cand_lo = metrics[lo] + (l1 if o1 else -l1) + (l0 if o0 else -l0)
+            if metrics[hi] < _INF:
+                _, o1, o0 = TRANSITIONS[hi][bit]
+                cand_hi = metrics[hi] + (l1 if o1 else -l1) + (l0 if o0 else -l0)
+            # Same tie convention as decode_bits above.
+            take_lo = cand_lo < cand_hi or cand_hi >= _INF
+            new[state] = cand_lo if take_lo else cand_hi
+            surv[state] = lo if take_lo else hi
         metrics = new
         survivors.append(surv)
 
@@ -333,6 +348,18 @@ def self_test() -> int:
     if corrected < total:
         print("        (< 100% is expected: the 7-bit block has no zero-tail "
               "flush, so errors in the last bits are not fully protected)")
+
+    # ---- ACS tie-breaking --------------------------------------------------
+    # Every sweep above uses at most one bit error, and a tie in the
+    # add-compare-select never arises there -- the two rules agree on all 4608
+    # exhaustive single-error cases, which is how the inverted tie-break in
+    # this file survived undetected.  Ties do arise from three errors up (11%
+    # of 3-error decodes, 40% of 4-error).  These four words were checked
+    # against rtl/decoder_term.sv in simulation, so they pin the model to the
+    # hardware rather than to a rule someone believed the hardware had.
+    check("ACS tie-break matches rtl/decoder_term.sv (4 three-error words)",
+          [f"{decode_terminated(int(w, 2)):07b}" for w in TIE_BREAK_WORDS],
+          list(TIE_BREAK_EXPECTED))
 
     # ---- terminated variant (rtl/decoder_term.sv) --------------------------
     bad = [m for m in range(128) if decode_terminated(encode_terminated(m)) != m]

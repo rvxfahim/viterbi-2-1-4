@@ -113,9 +113,52 @@ def build_stage(stage: int, stages: int, cw_bits: int) -> dict:
     }
 
 
-def context(name: str, terminate: bool) -> dict:
+#: Widths the original hand-written decoder used.  Deriving the widths from
+#: the stage count (below) would make them *narrower* than these at 7 and 10
+#: stages, which would change rtl/decoder.sv and rtl/decoder_term.sv and every
+#: synthesis number and waveform already published from them.  Flooring at the
+#: original values keeps those two byte-identical while still letting longer
+#: blocks widen as they need to.
+LEGACY_TABLE_W = 4
+LEGACY_STEP_W = 5
+LEGACY_METRIC_W = 5
+
+#: `table_counter`, `pinOut` and `counter_for_path` are `byte` in the template,
+#: so the sequencer cannot count past 127 stages however wide the fields get.
+MAX_STAGES = 127
+
+
+def widths(stages: int) -> dict:
+    """The three widths that were hard-coded for a 7-bit block.
+
+    Each is a property of the stage count, not of the algorithm:
+
+    * ``table_w``  -- ``getReturnPath`` compares ``currentTable`` against 1..stages.
+    * ``step_w``   -- ``steps_n`` counts up to stages + 1 before it falls out.
+    * ``metric_w`` -- there is no metric normalisation anywhere in this design,
+      so a path metric grows with the block.  The bound is 2 per stage (the
+      branch metric is a Hamming distance over a 2-bit symbol), hence
+      ``2 * stages``.  That bound is loose -- measured over
+      ``model/viterbi_ref.py`` at a 10% channel error rate the largest final
+      metric is 6 at 10 stages, 10 at 23 and 31 at 103 -- but it is the only
+      one that cannot be exceeded.  ``rtl/decoder_folded.sv`` normalises
+      instead and stays 4 bits wide at every length.
+    """
+    if stages > MAX_STAGES:
+        raise SystemExit(
+            f"{stages} stages exceeds the sequencer's {MAX_STAGES}-stage limit: "
+            "table_counter, pinOut and counter_for_path are `byte` in "
+            "rtl/gen/decoder.sv.j2 and would wrap.")
+    return {
+        "table_w": max(LEGACY_TABLE_W, stages.bit_length()),
+        "step_w": max(LEGACY_STEP_W, (stages + 1).bit_length()),
+        "metric_w": max(LEGACY_METRIC_W, (2 * stages).bit_length()),
+    }
+
+
+def context(name: str, terminate: bool, msg_bits: int = MSG_BITS) -> dict:
     tail = TAIL_BITS if terminate else 0
-    stages = MSG_BITS + tail
+    stages = msg_bits + tail
     cw_bits = 2 * stages
 
     # 1 cycle for stage 1, then one cycle per populated sub-stage.
@@ -143,12 +186,13 @@ def context(name: str, terminate: bool) -> dict:
     ]
 
     return {
+        **widths(stages),
         "module": name,
         "terminate": terminate,
         "return_paths": return_paths,
         "output_map": output_map,
         "tail": tail,
-        "msg_bits": MSG_BITS,
+        "msg_bits": msg_bits,
         "stages": stages,
         "cw_bits": cw_bits,
         "trellis_cycles": trellis_cycles,
@@ -169,12 +213,51 @@ VARIANTS = [
 ]
 
 
+def _env() -> Environment:
+    return Environment(
+        loader=FileSystemLoader(GEN_DIR),
+        undefined=StrictUndefined,
+        trim_blocks=True,
+        lstrip_blocks=True,
+        keep_trailing_newline=True,
+    )
+
+
+def render(name: str, terminate: bool, msg_bits: int = MSG_BITS) -> tuple[str, dict]:
+    """Render one variant.  Importable so scripts/synth.py can build the
+    block-length sweep without writing anything into rtl/."""
+    ctx = context(name, terminate, msg_bits)
+    return _env().get_template("decoder.sv.j2").render(**ctx), ctx
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--check", action="store_true",
                     help="verify the checked-in RTL matches the template")
+    ap.add_argument("--msg-bits", type=int, metavar="N",
+                    help="render a one-off variant with N message bits instead "
+                         "of regenerating the two checked-in decoders")
+    ap.add_argument("--out", type=Path, metavar="PATH",
+                    help="where --msg-bits writes (default: stdout)")
+    ap.add_argument("--module", default="decoder_term",
+                    help="module name for --msg-bits (default: decoder_term)")
+    ap.add_argument("--no-terminate", action="store_true",
+                    help="with --msg-bits, omit the zero-tail flush")
     args = ap.parse_args()
+
+    if args.msg_bits is not None:
+        text, ctx = render(args.module, not args.no_terminate, args.msg_bits)
+        if args.out:
+            args.out.parent.mkdir(parents=True, exist_ok=True)
+            args.out.write_text(text)
+            print(f"  {args.out}  {ctx['stages']} stages, "
+                  f"{ctx['cw_bits']}-bit codeword, widths "
+                  f"table={ctx['table_w']} step={ctx['step_w']} "
+                  f"metric={ctx['metric_w']}, {len(text.splitlines())} lines")
+        else:
+            sys.stdout.write(text)
+        return
 
     env = Environment(
         loader=FileSystemLoader(GEN_DIR),

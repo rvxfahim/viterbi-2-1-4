@@ -369,6 +369,10 @@ obj_dir/
 sim/build/
 *.vlt.bak
 
+# One-off long-block decoders rendered by scripts/gen_rtl.py --msg-bits.
+# Regenerable from the template; only the two checked-in variants live in rtl/.
+sim/scratch/
+
 # Simulation output
 results/vcd/
 *.vcd

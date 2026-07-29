@@ -131,6 +131,86 @@ def draw_awgn(theme):
     return fig, "ber_awgn"
 
 
+SERIES_BLOCKLEN = [
+    #  key              legend label                        short     slot
+    ("uncoded",       "Uncoded BPSK",                       "uncoded",  0),
+    ("terminated",    "7 message bits  (rate 7/20)",        "7 bits",   2),
+    ("terminated20",  "20 message bits  (rate 20/46)",      "20 bits",  3),
+    ("terminated100", "100 message bits  (rate 100/206)",   "100 bits", 4),
+]
+
+#: Asymptotic hard-decision coding gain, 10 log10(R * d_free / 2) with
+#: d_free = 6.  These were what the README quoted before the block length
+#: became reachable; the curves now measure them.
+ASYMPTOTIC_GAIN_DB = {"terminated": 0.21, "terminated20": 1.15,
+                      "terminated100": 1.63}
+
+
+def draw_blocklen(theme):
+    """The same decoder, the same trellis, three block lengths.
+
+    The tail is K - 1 = 3 bits however long the block is, so the rate penalty
+    is pure framing overhead that amortises away: 30% at 7 message bits, 13%
+    at 20, 2.9% at 100.  Nothing about the decoding changes -- which is the
+    point, and why all three curves come off one implementation.
+    """
+    d = _read(BER_DIR / "ber_awgn.csv")
+    if "terminated20" not in d:
+        return None
+    x = d["ebno_db"]
+
+    fig, ax = plt.subplots(figsize=(8.6, 5.6))
+    ax.plot(x, _clip(d["uncoded_theory"]), color=theme["muted"],
+            lw=1.0, ls=(0, (4, 3)), zorder=1,
+            label="Uncoded, analytic  Q(√(2Eb/N0))")
+
+    for key, label, short, slot in SERIES_BLOCKLEN:
+        ax.plot(x, _clip(d[key]), color=theme["series"][slot],
+                marker=vs.MARKERS[slot], markersize=4.5, label=label,
+                markeredgecolor=theme["surface"], markeredgewidth=0.8, zorder=3)
+
+    # No direct end labels on this one.  The 20- and 100-bit curves reach zero
+    # measured errors before the right edge and get clipped to the same floor,
+    # so end labels would stack on top of each other; the legend is the only
+    # readable option here.
+
+    ax.set_yscale("log")
+    ax.set_xlabel("Eb/N0  (dB)")
+    ax.set_ylabel("Bit error rate")
+    vs.titles(ax,
+              "The block is the problem, not the decoder",
+              "Identical code, identical trellis, identical decoding — only the "
+              "number of message bits\nper zero-tail flush changes. Three tail "
+              "bits are 30% overhead on a 7-bit block and 2.9% on 100.",
+              theme)
+    ax.set_xlim(x[0], x[-1] + 0.3)
+    ax.set_ylim(FLOOR, 1)
+    ax.grid(True, which="both", axis="y")
+    ax.grid(True, which="major", axis="x")
+    vs.despine(ax)
+
+    # Measured gain over uncoded at BER = 1e-4, against the asymptotic formula
+    # the README used to quote.  Annotating the longest block only: the 7-bit
+    # curve sits on top of the uncoded one and has nowhere to put a label.
+    x_unc = _crossing(x, d["uncoded"], 1e-4)
+    x_100 = _crossing(x, d["terminated100"], 1e-4)
+    if x_unc and x_100:
+        ax.annotate("", xy=(x_unc, 1e-4), xytext=(x_100, 1e-4),
+                    arrowprops=dict(arrowstyle="<->", color=theme["ink2"],
+                                    lw=1.3, shrinkA=0, shrinkB=0))
+        ax.annotate(f"{x_unc - x_100:.2f} dB at 100 message bits\n"
+                    f"(asymptotic bound "
+                    f"{ASYMPTOTIC_GAIN_DB['terminated100']:.2f} dB)",
+                    xy=((x_unc + x_100) / 2, 1.15e-4), xytext=(8.9, 5e-2),
+                    ha="center", va="bottom", color=theme["ink2"],
+                    fontsize=9, fontweight="600", linespacing=1.4,
+                    arrowprops=dict(arrowstyle="-", color=theme["axis"],
+                                    lw=0.9, shrinkA=4, shrinkB=2))
+
+    ax.legend(loc="lower left", ncol=1)
+    return fig, "ber_blocklen"
+
+
 SERIES_BSC = [
     ("uncoded",    "Uncoded",                    "uncoded",    0),
     ("rtl",        "decoder (no tail flush)",    "decoder",    1),
@@ -193,6 +273,8 @@ def main() -> None:
         raise SystemExit("no BER data -- run: python scripts/run_all.py ber")
     vs.both_themes(draw_awgn)
     vs.both_themes(draw_bsc)
+    # Skipped automatically if ber_awgn.csv predates the long-block variants.
+    vs.both_themes(draw_blocklen)
 
 
 if __name__ == "__main__":

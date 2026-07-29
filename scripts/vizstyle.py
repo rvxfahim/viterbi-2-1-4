@@ -137,9 +137,16 @@ def save(fig, stem: str, theme: dict) -> Path:
 
 
 def both_themes(draw) -> None:
-    """Render `draw(theme)` once per theme.  `draw` returns (fig, stem)."""
+    """Render `draw(theme)` once per theme.  `draw` returns (fig, stem).
+
+    A `draw` that returns None is skipped, which is how a figure opts out when
+    the data it needs is not in the CSV yet.
+    """
     for name in ("light", "dark"):
         theme = THEMES[name]
         apply(theme)
-        fig, stem = draw(theme)
+        result = draw(theme)
+        if result is None:
+            return
+        fig, stem = result
         save(fig, stem, theme)

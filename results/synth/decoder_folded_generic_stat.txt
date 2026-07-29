@@ -1,0 +1,35 @@
+
+3. Printing statistics.
+
+=== decoder_folded ===
+
+        +----------Local Count, excluding submodules.
+        | 
+      576 wires
+     1589 wire bits
+       17 public wires
+      127 public wire bits
+        5 ports
+       30 port bits
+        2 memories
+      112 memory bits
+      365 cells
+       33   $add
+        1   $bmux
+        2   $buf
+        1   $bwmux
+        1   $demux
+        8   $dff
+       10   $eq
+        1   $ge
+       18   $logic_and
+       13   $logic_not
+        8   $logic_or
+       19   $lt
+       17   $memrd_v2
+       27   $memwr_v2
+      172   $mux
+       16   $not
+        8   $or
+       10   $sub
+

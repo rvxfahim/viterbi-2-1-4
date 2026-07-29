@@ -128,19 +128,42 @@ def _viterbi_frames(rx: np.ndarray, n_bits: int, *, soft: bool,
 # Channel simulations
 # ---------------------------------------------------------------------------
 
+def _terminated(msg_bits: int, soft: bool = False) -> tuple:
+    """A zero-tail-terminated variant of any length.
+
+    The tail is always K - 1 = 3 bits however long the block is, so the rate
+    is msg / (2 * (msg + 3)) and the overhead shrinks as the block grows:
+    30% at 7 message bits, 13% at 20, 2.9% at 100.  Nothing else changes --
+    same generators, same 8 states, same trellis.
+    """
+    stages = msg_bits + TAIL_BITS
+    return (msg_bits, stages, True, soft, msg_bits / (2 * stages))
+
+
 VARIANTS = {
-    #  name          n_bits              terminated  soft   rate
-    "rtl":        (MSG_BITS,             False,      False, MSG_BITS / (2 * MSG_BITS)),
-    "terminated": (MSG_BITS + TAIL_BITS, True,       False, MSG_BITS / (2 * (MSG_BITS + TAIL_BITS))),
-    "soft":       (MSG_BITS,             False,      True,  MSG_BITS / (2 * MSG_BITS)),
+    #  name             msg_bits  n_bits (stages)  terminated  soft   rate
+    "rtl":             (MSG_BITS, MSG_BITS,        False,      False, 0.5),
+    "soft":            (MSG_BITS, MSG_BITS,        False,      True,  0.5),
+    "terminated":      _terminated(MSG_BITS),        # 7 msg bits, rate 7/20
+    # The long blocks the README quotes.  These were asymptotic formulas
+    # (10 log10(R * d_free / 2) = +1.15 and +1.63 dB) until the width
+    # constants in rtl/gen/decoder.sv.j2 were made to derive from the stage
+    # count; now they are simulated points on the same curve as the rest.
+    "terminated20":    _terminated(20),              # rate 20/46  = 0.435
+    "terminated100":   _terminated(100),             # rate 100/206 = 0.485
 }
 
 
-def _msgs(rng: np.random.Generator, n_frames: int, n_bits: int,
-          terminated: bool) -> np.ndarray:
+def _msgs(rng: np.random.Generator, n_frames: int, msg_bits: int,
+          n_bits: int) -> np.ndarray:
     msgs = np.zeros((n_frames, n_bits), dtype=np.uint8)
-    msgs[:, :MSG_BITS] = rng.integers(0, 2, (n_frames, MSG_BITS), dtype=np.uint8)
+    msgs[:, :msg_bits] = rng.integers(0, 2, (n_frames, msg_bits), dtype=np.uint8)
     return msgs                      # tail bits stay zero for the flush
+
+
+def _msg_bits(variant: str) -> int:
+    """Information bits per frame -- the denominator of every BER here."""
+    return MSG_BITS if variant == "uncoded" else VARIANTS[variant][0]
 
 
 def _run_batch(variant: str, channel: str, level: float, n_frames: int,
@@ -158,8 +181,8 @@ def _run_batch(variant: str, channel: str, level: float, n_frames: int,
             hat = (y < 0).astype(np.uint8)
         return int(np.count_nonzero(hat ^ bits)), n_frames * MSG_BITS
 
-    n_bits, terminated, soft, rate = VARIANTS[variant]
-    msgs = _msgs(rng, n_frames, n_bits, terminated)
+    msg_bits, n_bits, terminated, soft, rate = VARIANTS[variant]
+    msgs = _msgs(rng, n_frames, msg_bits, n_bits)
     code = _encode_frames(msgs, n_bits)
 
     if channel == "bsc":
@@ -174,8 +197,8 @@ def _run_batch(variant: str, channel: str, level: float, n_frames: int,
         rx = y if soft else (y < 0).astype(np.uint8)
 
     hat = _viterbi_frames(rx, n_bits, soft=soft, terminated=terminated)
-    errors = int(np.count_nonzero(hat[:, :MSG_BITS] ^ msgs[:, :MSG_BITS]))
-    return errors, n_frames * MSG_BITS
+    errors = int(np.count_nonzero(hat[:, :msg_bits] ^ msgs[:, :msg_bits]))
+    return errors, n_frames * msg_bits
 
 
 def measure(variant: str, channel: str, level: float, *, max_frames: int,
@@ -183,9 +206,12 @@ def measure(variant: str, channel: str, level: float, *, max_frames: int,
             seed: int = 0) -> float:
     """Adaptive Monte-Carlo: keep running batches until enough errors."""
     rng = np.random.default_rng(seed)
+    # Long variants carry more information bits per frame, so the same frame
+    # budget buys many more bits and the adaptive stop fires far sooner.
+    mb = _msg_bits(variant)
     errors = bits = 0
-    while bits < max_frames * MSG_BITS and errors < target_errors:
-        n = min(batch, max_frames - bits // MSG_BITS)
+    while bits < max_frames * mb and errors < target_errors:
+        n = min(batch, max_frames - bits // mb)
         if n <= 0:
             break
         e, b = _run_batch(variant, channel, level, n, rng)
@@ -224,13 +250,15 @@ def sweep_awgn(max_frames: int) -> list[dict]:
         ebno = 10.0 ** (ebno_db / 10.0)
         row = {"ebno_db": float(ebno_db),
                "uncoded_theory": qfunc(math.sqrt(2.0 * ebno))}
-        for variant in ("uncoded", "rtl", "terminated", "soft"):
+        for variant in ("uncoded", "rtl", "terminated", "terminated20",
+                        "terminated100", "soft"):
             row[variant] = measure(variant, "awgn", float(ebno_db),
                                    max_frames=max_frames, seed=2000 + i)
         rows.append(row)
         print(f"  AWGN Eb/N0={ebno_db:4.1f} dB  "
               f"uncoded={row['uncoded']:.3e} (theory {row['uncoded_theory']:.3e})  "
               f"rtl={row['rtl']:.3e}  term={row['terminated']:.3e}  "
+              f"t20={row['terminated20']:.3e}  t100={row['terminated100']:.3e}  "
               f"soft={row['soft']:.3e}")
     return rows
 
@@ -249,17 +277,22 @@ def self_check() -> None:
     rng = np.random.default_rng(7)
     msgs = rng.integers(0, 2, (256, MSG_BITS), dtype=np.uint8)
     code = _encode_frames(msgs, MSG_BITS)
-    noisy = code ^ (rng.random(code.shape) < 0.08)
-    hat = _viterbi_frames(noisy.astype(np.uint8), MSG_BITS,
-                          soft=False, terminated=False)
-    for i in range(256):
-        word = int("".join(str(b) for b in noisy[i].astype(int)), 2)
-        want = ref.decode_bits([int(b) for b in noisy[i]])
-        got = [int(b) for b in hat[i]]
-        if got != want:
-            raise SystemExit(
-                f"vectorised decoder disagrees with viterbi_ref on frame {i}: "
-                f"rx={word:014b} got={got} want={want}")
+    # Two noise levels deliberately.  At 0.08 the frames almost never carry
+    # enough errors to force an ACS tie, so this check passed for a long time
+    # while the two implementations disagreed on how to resolve one; 0.25
+    # produces ties in bulk.  See docs/known-issues.md #6.
+    for p in (0.08, 0.25):
+        noisy = code ^ (rng.random(code.shape) < p)
+        hat = _viterbi_frames(noisy.astype(np.uint8), MSG_BITS,
+                              soft=False, terminated=False)
+        for i in range(256):
+            word = int("".join(str(b) for b in noisy[i].astype(int)), 2)
+            want = ref.decode_bits([int(b) for b in noisy[i]])
+            got = [int(b) for b in hat[i]]
+            if got != want:
+                raise SystemExit(
+                    f"vectorised decoder disagrees with viterbi_ref at p={p} "
+                    f"on frame {i}: rx={word:014b} got={got} want={want}")
     # and the encoder
     for i in range(256):
         want = ref.encode_bits([int(b) for b in msgs[i]])
@@ -267,7 +300,7 @@ def self_check() -> None:
         if got != want:
             raise SystemExit(f"vectorised encoder disagrees on frame {i}")
     print("  PASS  vectorised engine matches model/viterbi_ref.py "
-          "(256 frames, encode + decode)")
+          "(2 x 256 frames at p = 0.08 and 0.25, encode + decode)")
 
 
 def main() -> None:

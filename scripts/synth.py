@@ -108,17 +108,94 @@ def synth_encoder(env: dict) -> dict:
     return {"cells": _stat_cells(out)}
 
 
-def synth_decoder(env: dict, top: str = "decoder") -> dict:
-    """Synthesise one decoder variant.  `top` is `decoder` or `decoder_term`."""
+def synth_decoder(env: dict, top: str = "decoder", *, src: str | None = None,
+                  label: str | None = None, msg_bits: int | None = None,
+                  keep_stats: bool = True) -> dict:
+    """Synthesise one decoder variant.
+
+    `src` overrides the source path, which is how the block-length sweep feeds
+    in the one-off decoders scripts/gen_rtl.py renders into sim/scratch/.
+    `msg_bits` sets the module parameter, which only decoder_folded has -- the
+    unrolled variants bake their length in at generation time, which is the
+    whole difference being measured.
+    """
+    src = src or f"rtl/{top}.sv"
+    label = label or top
+    param = f"-G MSG_BITS={msg_bits} " if msg_bits is not None else ""
+    # The sweep points pass keep_stats=False: fourteen more committed stat
+    # files would bury the three that anyone actually reads, and their numbers
+    # land in synth_summary.json anyway.
+    generic = (f"tee -o results/synth/{label}_generic_stat.txt stat"
+               if keep_stats else "stat")
+    ice40 = (f"tee -o results/synth/{label}_ice40_stat.txt stat"
+             if keep_stats else "stat")
     script = (
-        f"read_slang --top {top} rtl/{top}.sv; "
+        f"read_slang --top {top} {param}{src}; "
         f"hierarchy -check -top {top}; "
-        f"tee -o results/synth/{top}_generic_stat.txt stat; "
-        f"synth_ice40 -top {top} -json results/synth/{top}_ice40.json; "
-        f"tee -o results/synth/{top}_ice40_stat.txt stat"
+        f"{generic}; "
+        f"synth_ice40 -top {top} -json results/synth/{label}_ice40.json; "
+        f"{ice40}"
     )
-    out = run(["yosys", "-p", script], env, SYNTH_DIR / f"{top}_yosys.log")
+    out = run(["yosys", "-p", script], env, SYNTH_DIR / f"{label}_yosys.log")
     return {"cells": _stat_cells(out)}
+
+
+#: The measurement the whole exercise is for.  The unrolled decoder puts every
+#: trellis stage on the die, so its area is linear in the block length and it
+#: runs off the end of the device; the folded one reuses eight add-compare-
+#: select units and only its survivor memory grows.  Both decode the identical
+#: trellis.  Yosys cell counts rather than full place-and-route, because the
+#: long unrolled variants do not fit and nextpnr cannot report an area for a
+#: design it cannot place.
+BLOCK_SWEEP = [
+    # architecture, message bits
+    ("unrolled", 7),
+    ("unrolled", 20),
+    ("unrolled", 40),
+    ("folded", 7),
+    ("folded", 20),
+    ("folded", 40),
+    ("folded", 100),
+]
+
+
+def block_sweep(env: dict) -> list[dict]:
+    """Area against block length, for both architectures."""
+    sys.path.insert(0, str(REPO / "scripts"))
+    import gen_rtl                                   # noqa: PLC0415
+
+    scratch = REPO / "sim" / "scratch"
+    scratch.mkdir(parents=True, exist_ok=True)
+    rows = []
+
+    for arch, n in BLOCK_SWEEP:
+        stages = n + 3
+        if arch == "folded":
+            label = f"folded_m{n}"
+            res = synth_decoder(env, "decoder_folded", label=label,
+                                msg_bits=n, keep_stats=False)
+        else:
+            # The unrolled decoder has no parameter to set: a different block
+            # length is a different 4000- or 8000-line source file.
+            text, _ = gen_rtl.render("decoder_term", True, n)
+            path = scratch / f"decoder_term_{n}.sv"
+            path.write_text(text)
+            label = f"unrolled_m{n}"
+            res = synth_decoder(env, "decoder_term", label=label,
+                                src=path.relative_to(REPO).as_posix(),
+                                keep_stats=False)
+
+        cells = res["cells"]
+        lut = cells.get("SB_LUT4", 0)
+        ff = sum(v for k, v in cells.items() if k.startswith("SB_DFF"))
+        ram = sum(v for k, v in cells.items() if "RAM" in k)
+        rows.append({"arch": arch, "msg_bits": n, "stages": stages,
+                     "lut4": lut, "flops": ff, "ram": ram,
+                     "fits_up5k": lut <= DEVICE["luts"]})
+        fit = "" if lut <= DEVICE["luts"] else "   OVER DEVICE"
+        print(f"    {arch:<8} {n:>3} msg bits  {stages:>3} stages  "
+              f"LUT4 {lut:>5}  flops {ff:>4}{fit}")
+    return rows
 
 
 def _stat_cells(text: str) -> dict[str, int]:
@@ -179,6 +256,8 @@ def main() -> None:
     p = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     p.add_argument("--skip-pnr", action="store_true")
     p.add_argument("--skip-schematic", action="store_true")
+    p.add_argument("--skip-sweep", action="store_true",
+                   help="skip the area-against-block-length sweep")
     args = p.parse_args()
 
     env = oss_env()
@@ -190,9 +269,11 @@ def main() -> None:
     print("  synthesising encoder (rtl/d_ff.sv, built-in front end) ...")
     summary["encoder"] = synth_encoder(env)
 
-    # Both decoder variants come off the same template, so synthesising both
-    # is what puts a number on what termination costs in area and Fmax.
-    for top in ("decoder", "decoder_term"):
+    # The two unrolled variants come off the same template, so synthesising
+    # both is what puts a number on what termination costs in area and Fmax.
+    # decoder_folded joins them at the same 7 message bits / 10 stages, which
+    # is the head-to-head: same trellis, same decoded bits, other architecture.
+    for top in ("decoder", "decoder_term", "decoder_folded"):
         print(f"  synthesising {top} (rtl/{top}.sv, read_slang front end) ...")
         summary[top] = synth_decoder(env, top)
         cells = summary[top]["cells"]
@@ -207,6 +288,10 @@ def main() -> None:
             print(f"      {lc.get('used')}/{lc.get('total')} logic cells "
                   f"({lc.get('percent')}%),  "
                   f"Fmax {summary[top]['pnr']['fmax_mhz']} MHz")
+
+    if not args.skip_sweep:
+        print("  area against block length (yosys cell counts) ...")
+        summary["block_sweep"] = block_sweep(env)
 
     if not args.skip_schematic:
         summary["schematic"] = schematic(env)

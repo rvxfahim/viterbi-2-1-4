@@ -103,11 +103,102 @@ never had this bug — it keeps `lowest_value` and `lowest_index` as separate
 variables. `scripts/check_cpp.py` now runs the same exhaustive sweep against the
 C++ model so this class of bug cannot return.
 
+### 6. Two of the four models resolved add-compare-select ties the wrong way
+
+Including `model/viterbi_ref.py`, which is the reference every other
+implementation is checked against.
+
+On a metric tie the RTL keeps the **higher**-numbered predecessor. That falls
+out of the shape of the compare in `rtl/gen/decoder.sv.j2:132`: the low
+predecessor wins only on a strict `<`, so a tie drops through to the `else`.
+`model/ber_sweep.py:108` does the same thing (`take_lo = cand_lo < cand_hi`),
+and `viterbi_ref.py`'s own docstring said the same thing.
+
+| implementation | tie went to | correct |
+|---|---|---|
+| `rtl/gen/decoder.sv.j2` (both unrolled decoders) | high predecessor | yes |
+| `model/ber_sweep.py` | high predecessor | yes |
+| `model/viterbi_ref.py` | **low** predecessor | no |
+| `model/cpp/viterbi_2_1_4.cpp` | **low** predecessor | no |
+
+`viterbi_ref.py` looped over `(lo, hi)` seeding the best with `lo` and replaced
+only on a strict `<`. The C++ had the same shape: `finalStates[]` is seeded
+from the even-state transition and the odd one replaces it only on a strict
+`<`. Both now keep the high predecessor, and `rtl/decoder_folded.sv` was
+written against the corrected rule from the start.
+
+It survived because **a single bit error never produces a tie**. The two rules
+agree on all 4608 exhaustive single-error cases across both decoders, which is
+every case any sweep in this repo ran. Ties start appearing at three errors:
+
+| errors injected | decodes that differ between the two rules |
+|---|---|
+| 1 (all 4608 exhaustive cases) | 0 |
+| 2 (4000 random) | 0 |
+| 3 (4000 random) | 439 (11%) |
+| 4 (4000 random) | 1597 (40%) |
+
+Settled against the hardware rather than by argument: four three-error words
+were run through `rtl/decoder_term.sv` in simulation and all four came back
+with the high predecessor's answer. Those four words are now pinned in
+`model/viterbi_ref.TIE_BREAK_WORDS` and checked three ways — by the model's
+`--self-test`, by `scripts/check_cpp.py` against the C++ binary, and
+implicitly by the RTL sweep below.
+
+Three further regressions close the hole that let it hide:
+
+* `system_folded_tb.sv` records 512 random three-error words that
+  `scripts/check_rtl.py` compares against the model. The old model disagreed
+  on 34 of them, so this alone would have caught it.
+* `scripts/check_cpp.py` runs the four pinned words through the C++ model,
+  which its 2688-case sweep could never distinguish.
+* `ber_sweep.self_check` now runs at p = 0.25 as well as 0.08. At 0.08 alone
+  the frames were too clean to produce a tie, which is why that check passed
+  for so long while the two implementations disagreed.
+
+No committed result moved: every sweep CSV and every BER curve was produced
+either by the RTL or by `ber_sweep.py`, both of which were already right.
+
+### 7. The block length was not the parameter the docs claimed
+
+`docs/architecture.md` said the fix for the short block was "a longer block,
+not different logic; the RTL is generated from a template and the block length
+is a parameter". The first half is true. The second was not.
+
+`scripts/gen_rtl.py` does derive every stage, branch metric and traceback entry
+from `MSG_BITS` and the generators. But three widths in the template were
+literals sized for a 7-bit block:
+
+| declaration | ceiling | first breaks at |
+|---|---|---|
+| `getReturnPath(… bit [3:0] currentTable)` | 15 stages | **12** message bits |
+| `logic [4:0] steps_n, stage_n` | 31 steps | ~27 message bits |
+| `logic [4:0] finalStates[0:7]` | metric ≤ 31 | ~100 message bits |
+
+Past those the decoder still compiles, still simulates and still reports no
+warning — it just returns garbage. Measured: at 20 message bits the old widths
+decoded **3/200** random single-error frames correctly. With the widths derived
+from the stage count, **200/200**.
+
+All three now come from `gen_rtl.widths()`, floored at the original values so
+`rtl/decoder.sv` and `rtl/decoder_term.sv` regenerate byte-identically and every
+published figure and synthesis number still stands. `scripts/check_long.py`
+(`run_all.py long`) builds the generated decoder at 20 and 40 message bits and
+checks every frame against the model, so this cannot regress silently again.
+
+The claim came from `model/cpp/viterbi_2_1_4.cpp:8`, where it is true: that
+file was refactored to build its stages in a loop over a
+`vector<HammingTable>`, which does make its block length a parameter. In
+software that refactor is free. In hardware the equivalent is not a refactor
+but a different architecture, and the RTL never got it — so the claim was true
+of the model and false of the design it was describing. See the translation
+section in [architecture.md](architecture.md).
+
 ---
 
 ## Outstanding
 
-### 6. The legacy testbenches race at time zero
+### 8. The legacy testbenches race at time zero
 
 `tb/legacy/decoder_tb.sv` and `tb/legacy/dff_tb.sv` drive the clock by hand with
 non-blocking assignments (`clk <= ~clk`) from one `initial` block while another
@@ -121,27 +212,27 @@ race-free replacements with a proper `always #5 clk = ~clk` generator, and all
 of them drive DUT inputs on `negedge` so they never race the DUT's blocking
 assignments.
 
-### 7. `decoder_tb.sv` has no `timescale` and no `$finish`
+### 9. `decoder_tb.sv` has no `timescale` and no `$finish`
 
 The flow supplies `--timescale 1ns/1ps` on the Verilator command line and the
 simulation terminates by event exhaustion at 14 µs. The new benches declare
 their own timescale and call `$finish`.
 
-### 8. Blocking assignments in a sequential block
+### 10. Blocking assignments in a sequential block
 
 The decoder uses `=` throughout `always @(posedge clk)`. It simulates correctly
 because everything lives in one block, and it synthesises, but it trips
 Verilator's `BLKSEQ` style warning and is fragile to refactoring. Kept, because
 the generated RTL deliberately mirrors the original's structure.
 
-### 9. Width mismatches
+### 11. Width mismatches
 
 `out[pinNumber]` indexes a 7-bit vector with a `byte`, and `set_outputs` takes a
 `bit[3:0]` argument fed 3-bit actuals. Both are benign; the flow waives
 `WIDTHTRUNC` and `WIDTHEXPAND` explicitly rather than globally, so any *new*
 width warning still fails the build.
 
-### 10. The end-state search sits on the clock's critical path
+### 12. The end-state search sits on the clock's critical path
 
 Earlier revisions of this document claimed the ceiling was `getReturnPath()`.
 Reading the nextpnr timing report rather than guessing shows otherwise, so the
@@ -152,7 +243,7 @@ metric add-compare-select carry chains, and *ends at the `lowest_index`
 register*. That is the eight-way minimum-over-end-states search being chained
 combinationally onto the ACS logic inside a single clock edge — which happens
 because the whole decoder is one `always` block using blocking assignments
-(issue 8), so the search reads metrics computed earlier in the same edge.
+(issue 10), so the search reads metrics computed earlier in the same edge.
 
 | | hops on the critical path | logic | routing | total |
 |---|---|---|---|---|
@@ -169,3 +260,36 @@ is on the terminated variant's path but is not what limits either design today.
 
 Fmax varies by roughly ±0.5 MHz between placer seeds; the numbers above come
 from `results/synth/*_nextpnr.log` at seed 1.
+
+### 13. The unrolled decoders never normalise their path metrics
+
+`finalStates` accumulates without bound, so the width has to be sized for the
+worst case the block can produce — 2 per stage — rather than for the spread
+that actually matters. `gen_rtl.widths()` now does exactly that, which is
+correct but wasteful, and it is why the unrolled decoder's metric fields grow
+with the block while `rtl/decoder_folded.sv` stays at 4 bits forever.
+
+The textbook fix is to subtract the stage minimum, as the folded decoder does:
+it cannot change any later comparison, because every metric moves by the same
+amount. It is not retrofitted here because the unrolled decoders also encode
+survivors by overwriting the losing branch metric with the sentinel `3`, and
+normalising would have to leave that sentinel alone. That is a change to the
+one mechanism every existing equivalence check depends on, for a design whose
+block length is capped at ~17 message bits by area anyway (issue 7).
+
+Measured, for reference: at a 10% channel error rate the largest final metric
+is 6 at 10 stages, 10 at 23, 31 at 103.
+
+### 14. `decoder_folded` does a whole trellis stage in one combinational path
+
+Eight butterflies, the eight-way minimum over the new metrics, and the
+normalising subtract all sit between two clock edges. That is why it has the
+lowest Fmax of the three decoders (~11 MHz) despite being the smallest by a
+factor of nearly four.
+
+It still wins on throughput — 20 clocks against 80 for the same trellis, so
+3.95 Mbit/s against 2.37 — so this is a headroom problem rather than a
+regression. Two standard fixes, neither applied yet: put a pipeline register
+between the add-compare-select and the normalisation, or drop the explicit
+minimum-search in favour of modulo arithmetic, which bounds the metrics without
+a reduction tree at all.

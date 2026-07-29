@@ -155,6 +155,53 @@ def run_case(exe: str | None, terminated: bool) -> int:
     return rc
 
 
+def check_tie_break(exe: str | None) -> int:
+    """The four three-error words that pin the add-compare-select tie rule.
+
+    The sweep above cannot see a tie: a single bit error never produces one, so
+    both possible rules pass all 2688 cases.  The C++ model kept the *low*
+    predecessor on a tie, where the RTL keeps the high one, and nothing in this
+    repo noticed for as long as only single errors were tested.  See
+    docs/known-issues.md #6.
+
+    The expected outputs are not derived from any model -- they were read out
+    of rtl/decoder_term.sv in simulation.
+    """
+    vectors = OUT_DIR / "vectors_tiebreak.txt"
+    results = OUT_DIR / "results_tiebreak.csv"
+    with vectors.open("w") as fh:
+        fh.write("# ACS tie-break vectors -- expected outputs measured from "
+                 "rtl/decoder_term.sv\n# received expected\n")
+        for word, want in zip(ref.TIE_BREAK_WORDS, ref.TIE_BREAK_EXPECTED):
+            fh.write(f"{word} {want}\n")
+
+    proc = run_model(exe, ["--input", vectors.relative_to(REPO).as_posix(),
+                           "--output", results.relative_to(REPO).as_posix(),
+                           "--terminate"])
+    if proc.returncode not in (0, 1):
+        sys.stderr.write((proc.stdout or "") + (proc.stderr or ""))
+        raise SystemExit("C++ model failed to run (tie-break)")
+
+    bad = []
+    with results.open() as fh:
+        next(fh)
+        for line in fh:
+            _idx, received, decoded, expected, _res = line.strip().split(",")
+            if decoded != expected:
+                bad.append((received, decoded, expected))
+
+    if bad:
+        print(f"  {RED}FAIL{RESET}  cpp tie-break: {len(bad)}/"
+              f"{len(ref.TIE_BREAK_WORDS)} words resolve ties the wrong way")
+        for rx, got, want in bad:
+            print(f"          rx={rx}  cpp={got}  rtl={want}")
+        return 1
+    print(f"  {GREEN}PASS{RESET}  cpp tie-break: all "
+          f"{len(ref.TIE_BREAK_WORDS)} three-error words match "
+          f"rtl/decoder_term.sv")
+    return 0
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -164,7 +211,8 @@ def main() -> None:
 
     print("Checking the C++ reference model")
     exe = build()
-    rc = run_case(exe, terminated=False) + run_case(exe, terminated=True)
+    rc = (run_case(exe, terminated=False) + run_case(exe, terminated=True)
+          + check_tie_break(exe))
 
     if not args.keep:
         shutil.rmtree(OUT_DIR, ignore_errors=True)

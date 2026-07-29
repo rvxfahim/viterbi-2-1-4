@@ -43,6 +43,8 @@ RTL_ENCODER = ["rtl/d_ff.sv"]
 RTL_BOTH = ["rtl/decoder.sv", "rtl/d_ff.sv"]
 RTL_DECODER_TERM = ["rtl/decoder_term.sv"]
 RTL_BOTH_TERM = ["rtl/decoder_term.sv", "rtl/d_ff.sv"]
+RTL_DECODER_FOLDED = ["rtl/decoder_folded.sv"]
+RTL_BOTH_FOLDED = ["rtl/decoder_folded.sv", "rtl/d_ff.sv"]
 
 GREEN, RED, YELLOW, DIM, RESET = (
     "\033[32m", "\033[31m", "\033[33m", "\033[2m", "\033[0m",
@@ -183,6 +185,27 @@ def cmd_sim(args) -> None:
                 raise SystemExit(f"decoder_term_bench{label} FAILED")
             _ok(f"decoder_term_bench  dat={dat}  out={exp}")
 
+    if only in (None, "decoder_folded_bench"):
+        vl.build("decoder_folded_bench",
+                 RTL_DECODER_FOLDED + ["tb/decoder_folded_bench.sv"])
+        # The same two words decoder_term_bench uses, so the waveforms line up
+        # and the clock counts can be compared directly: 69 trellis clocks
+        # there against 10 here, for the identical trellis.
+        for label, dat, exp in [
+            ("",      "11110111010111000000", "1011000"),
+            ("_tail", "11110111011011010110", "1011011"),
+        ]:
+            proc = vl.run(
+                "decoder_folded_bench",
+                plusargs={"DAT": dat, "EXP": exp,
+                          "VCD": f"results/vcd/decoder_folded_bench{label}.vcd"},
+                quiet=True, check=False,
+            )
+            if "PASS" not in proc.stdout or proc.returncode != 0:
+                sys.stdout.write(proc.stdout)
+                raise SystemExit(f"decoder_folded_bench{label} FAILED")
+            _ok(f"decoder_folded_bench  dat={dat}  out={exp}")
+
     if only in (None, "encoder_bench"):
         vl.build("encoder_bench", RTL_ENCODER + ["tb/encoder_bench.sv"])
         proc = vl.run("encoder_bench",
@@ -225,12 +248,25 @@ def cmd_sweep(args) -> None:
                "decoder      -- 128 messages x 15 channels  (14-bit, unterminated)")
     _sweep_one("system_term_tb", RTL_BOTH_TERM, "rtl_sweep_term.csv",
                "decoder_term -- 128 messages x 21 channels  (20-bit, terminated)")
+    _sweep_one("system_folded_tb", RTL_BOTH_FOLDED, "rtl_sweep_folded.csv",
+               "decoder_folded -- same 2688 cases + 512 random 3-error words")
     _py("scripts/check_rtl.py")
 
 
 # ---------------------------------------------------------------------------
 # model / ber / plots / synth
 # ---------------------------------------------------------------------------
+
+def cmd_long(args) -> None:
+    _hdr("Generated decoder at longer block lengths")
+    # getattr, because `all` reaches this through its own subparser, which has
+    # no --frames/--lengths of its own.
+    extra = ["--frames", str(getattr(args, "frames", 200))]
+    lengths = getattr(args, "lengths", None)
+    if lengths:
+        extra += ["--lengths", *(str(n) for n in lengths)]
+    _py("scripts/check_long.py", *extra)
+
 
 def cmd_gen(args) -> None:
     _hdr("Generate RTL from rtl/gen/decoder.sv.j2")
@@ -267,6 +303,13 @@ def cmd_synth(args) -> None:
     _py("scripts/synth.py", *(["--skip-pnr"] if args.skip_pnr else []))
 
 
+def _plot_area() -> None:
+    if not (REPO / "results" / "synth" / "synth_summary.json").exists():
+        _warn("no synthesis data yet -- run `python scripts/run_all.py synth` first")
+        return
+    _py("scripts/plot_area.py")
+
+
 def cmd_plots(_args) -> None:
     _hdr("Figures")
     IMG_DIR.mkdir(parents=True, exist_ok=True)
@@ -276,6 +319,7 @@ def cmd_plots(_args) -> None:
         _py("scripts/plot_ber.py")
     else:
         _warn("no BER data yet -- run `python scripts/run_all.py ber` first")
+    _plot_area()
 
 
 def cmd_clean(_args) -> None:
@@ -291,6 +335,7 @@ def cmd_all(args) -> None:
     cmd_cpp(args)
     cmd_sim(args)
     cmd_sweep(args)
+    cmd_long(args)
     cmd_ber(args)
     cmd_synth(args)
     cmd_plots(args)
@@ -314,10 +359,16 @@ def main() -> None:
 
     s = sub.add_parser("sim")
     s.add_argument("--only", choices=["legacy", "decoder_bench",
-                                     "decoder_term_bench", "encoder_bench"])
+                                     "decoder_term_bench", "decoder_folded_bench",
+                                     "encoder_bench"])
     s.set_defaults(func=cmd_sim)
 
     sub.add_parser("sweep").set_defaults(func=cmd_sweep)
+
+    lg = sub.add_parser("long")
+    lg.add_argument("--frames", type=int, default=200)
+    lg.add_argument("--lengths", type=int, nargs="+", metavar="N")
+    lg.set_defaults(func=cmd_long)
 
     b = sub.add_parser("ber")
     b.add_argument("--trials", type=int, default=200_000)
