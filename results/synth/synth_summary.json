@@ -1,0 +1,248 @@
+{
+  "yosys": "Yosys 0.67+102 (git sha1 07a615a28-dirty, Release, GNU /usr/bin/x86_64-w64-mingw32-g++ 15.2.1)",
+  "encoder": {
+    "cells": {
+      "$dff": 2,
+      "$mux": 4,
+      "$xor": 4,
+      "$_XOR_": 4,
+      "$_AND_": 4,
+      "SB_DFF": 6,
+      "SB_LUT4": 7
+    }
+  },
+  "decoder": {
+    "cells": {
+      "$add": 190,
+      "$and": 8,
+      "$buf": 11,
+      "$demux": 16,
+      "$dff": 178,
+      "$eq": 335,
+      "$ge": 17,
+      "$le": 1,
+      "$logic_and": 267,
+      "$logic_not": 27,
+      "$lt": 56,
+      "$mux": 14516,
+      "$ne": 368,
+      "$not": 337,
+      "$or": 8,
+      "$pmux": 7,
+      "$sub": 1,
+      "$_MUX_": 2683,
+      "$_OR_": 885,
+      "$_AND_": 556,
+      "$_NOT_": 528,
+      "$specify2": 8,
+      "$_ORNOT_": 43,
+      "$_XOR_": 6,
+      "SB_DFF": 8,
+      "SB_DFFE": 244,
+      "SB_DFFSR": 40,
+      "SB_DFFESR": 201,
+      "SB_DFFESS": 4,
+      "SB_CARRY": 511,
+      "SB_LUT4": 1338
+    },
+    "pnr": {
+      "device": "Lattice iCE40 UP5K (SG48)",
+      "utilisation": {
+        "ICESTORM_LC": {
+          "used": 1810,
+          "total": 5280,
+          "percent": 34
+        },
+        "ICESTORM_RAM": {
+          "used": 0,
+          "total": 30,
+          "percent": 0
+        },
+        "SB_IO": {
+          "used": 24,
+          "total": 39,
+          "percent": 61
+        },
+        "SB_GB": {
+          "used": 3,
+          "total": 8,
+          "percent": 37
+        },
+        "ICESTORM_PLL": {
+          "used": 0,
+          "total": 1,
+          "percent": 0
+        },
+        "SB_WARMBOOT": {
+          "used": 0,
+          "total": 1,
+          "percent": 0
+        },
+        "ICESTORM_DSP": {
+          "used": 0,
+          "total": 8,
+          "percent": 0
+        },
+        "ICESTORM_HFOSC": {
+          "used": 0,
+          "total": 1,
+          "percent": 0
+        },
+        "ICESTORM_LFOSC": {
+          "used": 0,
+          "total": 1,
+          "percent": 0
+        },
+        "SB_I2C": {
+          "used": 0,
+          "total": 2,
+          "percent": 0
+        },
+        "SB_SPI": {
+          "used": 0,
+          "total": 2,
+          "percent": 0
+        },
+        "IO_I3C": {
+          "used": 0,
+          "total": 2,
+          "percent": 0
+        },
+        "SB_LEDDA_IP": {
+          "used": 0,
+          "total": 1,
+          "percent": 0
+        },
+        "SB_RGBA_DRV": {
+          "used": 0,
+          "total": 1,
+          "percent": 0
+        },
+        "ICESTORM_SPRAM": {
+          "used": 0,
+          "total": 4,
+          "percent": 0
+        }
+      },
+      "fmax_mhz": 12.88,
+      "critical_path_ns": 34.84
+    }
+  },
+  "decoder_term": {
+    "cells": {
+      "$add": 310,
+      "$and": 8,
+      "$buf": 14,
+      "$demux": 16,
+      "$dff": 241,
+      "$eq": 500,
+      "$ge": 18,
+      "$le": 1,
+      "$logic_and": 411,
+      "$logic_not": 36,
+      "$lt": 72,
+      "$mux": 26210,
+      "$ne": 584,
+      "$not": 703,
+      "$or": 8,
+      "$pmux": 10,
+      "$sub": 2,
+      "$_MUX_": 3845,
+      "$_OR_": 1258,
+      "$_AND_": 817,
+      "$_NOT_": 740,
+      "$specify2": 8,
+      "$_ORNOT_": 67,
+      "$_XOR_": 8,
+      "SB_DFF": 8,
+      "SB_DFFE": 370,
+      "SB_DFFESR": 322,
+      "SB_DFFESS": 3,
+      "SB_CARRY": 799,
+      "SB_LUT4": 1936
+    },
+    "pnr": {
+      "device": "Lattice iCE40 UP5K (SG48)",
+      "utilisation": {
+        "ICESTORM_LC": {
+          "used": 2356,
+          "total": 5280,
+          "percent": 44
+        },
+        "ICESTORM_RAM": {
+          "used": 0,
+          "total": 30,
+          "percent": 0
+        },
+        "SB_IO": {
+          "used": 30,
+          "total": 39,
+          "percent": 76
+        },
+        "SB_GB": {
+          "used": 3,
+          "total": 8,
+          "percent": 37
+        },
+        "ICESTORM_PLL": {
+          "used": 0,
+          "total": 1,
+          "percent": 0
+        },
+        "SB_WARMBOOT": {
+          "used": 0,
+          "total": 1,
+          "percent": 0
+        },
+        "ICESTORM_DSP": {
+          "used": 0,
+          "total": 8,
+          "percent": 0
+        },
+        "ICESTORM_HFOSC": {
+          "used": 0,
+          "total": 1,
+          "percent": 0
+        },
+        "ICESTORM_LFOSC": {
+          "used": 0,
+          "total": 1,
+          "percent": 0
+        },
+        "SB_I2C": {
+          "used": 0,
+          "total": 2,
+          "percent": 0
+        },
+        "SB_SPI": {
+          "used": 0,
+          "total": 2,
+          "percent": 0
+        },
+        "IO_I3C": {
+          "used": 0,
+          "total": 2,
+          "percent": 0
+        },
+        "SB_LEDDA_IP": {
+          "used": 0,
+          "total": 1,
+          "percent": 0
+        },
+        "SB_RGBA_DRV": {
+          "used": 0,
+          "total": 1,
+          "percent": 0
+        },
+        "ICESTORM_SPRAM": {
+          "used": 0,
+          "total": 4,
+          "percent": 0
+        }
+      },
+      "fmax_mhz": 27.12,
+      "critical_path_ns": 29.83
+    }
+  },
+  "schematic": true
+}

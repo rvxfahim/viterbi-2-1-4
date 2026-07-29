@@ -361,3 +361,39 @@ MigrationBackup/
 
 # Fody - auto-generated XML schema
 FodyWeavers.xsd
+# ---------------------------------------------------------------------------
+# Open-source HDL flow artefacts
+# ---------------------------------------------------------------------------
+# Verilator
+obj_dir/
+sim/build/
+*.vlt.bak
+
+# Simulation output
+results/vcd/
+*.vcd
+*.fst
+*.ghw
+
+# Yosys / nextpnr intermediates.  The small human-readable reports under
+# results/synth are committed; the multi-megabyte netlists and the full Yosys
+# transcript are regenerable and stay out.
+*.asc
+*.bin
+*.blif
+*.edif
+results/synth/*_ice40.json
+results/synth/*_yosys.log
+
+# C++ model build + generated vectors (regenerable)
+results/cpp/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Waveform viewers
+*.gtkw
+transcript
