@@ -232,10 +232,30 @@ does, not the encoder.
 
 **As originally framed, this decoder is worse than not coding at all.** A
 rate-1/2 code spends 3 dB of energy per information bit buying redundancy, and
-an unterminated 7-bit block never earns it back. The 3-bit zero tail that
-`decoder_term` adds moves the curve below uncoded BPSK and is worth about
-**2.3 dB at BER = 1e-3**; soft decision would buy roughly another 2 dB on top,
-though the RTL is hard-decision only.
+an unterminated 7-bit block never earns it back. Terminating the trellis is
+worth **2.3 dB at BER = 1e-3** against `decoder`.
+
+But measured against *uncoded BPSK*, `decoder_term` only just wins, and only
+at high SNR:
+
+| | uncoded | `decoder_term` | |
+|---|---|---|---|
+| below 6.4 dB | | | terminated is **worse** |
+| BER = 1e-3 | 6.84 dB | 6.79 dB | +0.05 dB |
+| BER = 1e-4 | 8.36 dB | 8.16 dB | +0.20 dB |
+| BER = 1e-5 | 9.58 dB | 9.17 dB | +0.41 dB |
+
+That is not a disappointing result, it is the textbook one. This code has
+free distance 6 (computed, not quoted — see the search in
+`docs/architecture.md`), so its asymptotic hard-decision coding gain is
+`10 log10(R · d_free / 2)`. Three tail bits on a 7-bit block drop the rate to
+7/20 = 0.35, a 4.56 dB energy penalty, which leaves
+`10 log10(0.35 · 6 / 2) = +0.21 dB`. The simulation converges on exactly that.
+
+**The block is simply too short.** The tail is 30% overhead here. The same RTL
+on a longer block gets most of the code's gain back — +1.15 dB at 20 message
+bits, +1.63 dB at 100 — and soft decision, worth `10 log10(R · d_free)` ≈ 3.2 dB,
+is where the real win is. The RTL is hard-decision only.
 
 On a binary symmetric channel, where no rate penalty applies, the picture is
 friendlier — the decoder helps below p ≈ 0.088:

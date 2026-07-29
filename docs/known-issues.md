@@ -53,6 +53,14 @@ Measured, not asserted: **2560/2560** single-bit errors corrected, at every one
 of the 20 codeword positions, across all 128 messages. See
 `docs/img/error_correction_compare.png`.
 
+Be careful how far that is pushed, though. Terminating is worth 2.3 dB against
+the unterminated decoder, but against *uncoded BPSK* it wins by only +0.05 dB at
+BER = 1e-3, and below 6.41 dB it still loses. That is exactly what theory
+predicts for a block this short: d_free = 6 and an effective rate of 7/20 give
+an asymptotic hard-decision gain of 10 log10(0.35 * 6 / 2) = +0.21 dB. The
+remaining problem is the block length, not the decoder - see
+[architecture.md](architecture.md).
+
 The unterminated `rtl/decoder.sv` is still built, still swept and still
 documented, because it is what the original assignment produced and what the
 published waveforms show.

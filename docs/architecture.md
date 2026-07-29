@@ -136,11 +136,44 @@ effective rate of 0.35 rather than 0.50.
 What it buys:
 
 * **2560/2560** single-bit errors corrected, at every one of the 20 codeword
-  positions, across all 128 messages. A (2,1,4) code has free distance 6, so
-  with a defined end state every single error is inside its correcting radius.
-  `docs/img/error_correction_compare.png` puts the two side by side.
-* About **2.3 dB at BER = 1e-3** over AWGN, which is what moves the curve from
-  above the uncoded BPSK line to below it.
+  positions, across all 128 messages. `docs/img/error_correction_compare.png`
+  puts the two side by side.
+* About **2.3 dB at BER = 1e-3** over AWGN *relative to `decoder`*.
+
+## How much coding gain is actually available here
+
+The free distance of this code is worth computing rather than quoting. Taking
+the minimum Hamming weight over all paths that leave state 0 and remerge:
+
+    d_free = 6
+
+For hard-decision Viterbi the asymptotic coding gain over uncoded BPSK is
+
+    G_hard = 10 log10(R * d_free / 2)
+    G_soft = 10 log10(R * d_free)
+
+and R here is the *effective* rate, which the tail makes much worse than 1/2:
+
+| block | rate | tail overhead | G_hard |
+|---|---|---|---|
+| 7 message bits + 3 tail | 7/20 = 0.350 | 30% | **+0.21 dB** |
+| 20 + 3 | 0.435 | 13% | +1.15 dB |
+| 100 + 3 | 0.485 | 2.9% | +1.63 dB |
+| asymptotic (R -> 1/2) | 0.500 | - | +1.76 dB |
+
+So `decoder_term` should beat uncoded BPSK by about a fifth of a decibel, and
+that is what the Monte-Carlo produces: +0.05 dB at BER = 1e-3, +0.20 dB at
+1e-4, +0.41 dB at 1e-5, with a crossover at 6.41 dB below which it is *worse*
+than uncoded.
+
+Two things follow. First, termination is necessary but not sufficient - it
+fixes the unprotected tail bits and stops the design losing badly, but on a
+7-bit block it cannot deliver much gain, because three flush bits on seven
+message bits is 30% overhead. The fix for that is a longer block, not different
+logic; the RTL is generated from a template and the block length is a
+parameter. Second, the largest single improvement available is soft decision:
+G_soft = 10 log10(0.35 * 6) = +3.2 dB, versus +0.21 dB hard. That is a decoder
+change, not a framing change, and the RTL is hard-decision only.
 
 ## Synthesis and critical path
 
