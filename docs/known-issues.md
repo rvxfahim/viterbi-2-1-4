@@ -133,9 +133,31 @@ the generated RTL deliberately mirrors the original's structure.
 `WIDTHTRUNC` and `WIDTHEXPAND` explicitly rather than globally, so any *new*
 width warning still fails the build.
 
-### 10. The traceback tree is the clock ceiling
+### 10. The end-state search sits on the clock's critical path
 
-`getReturnPath()` is a chain of 8-way case statements — one per trellis stage —
-evaluated inside a single clock edge. Storing survivor pointers in a RAM instead
-of recomputing them from sentinels, or pipelining the tree, is the obvious next
-step. See [architecture.md](architecture.md).
+Earlier revisions of this document claimed the ceiling was `getReturnPath()`.
+Reading the nextpnr timing report rather than guessing shows otherwise, so the
+claim is corrected here.
+
+In **both** variants the critical path starts at `data`, runs through a stage's
+metric add-compare-select carry chains, and *ends at the `lowest_index`
+register*. That is the eight-way minimum-over-end-states search being chained
+combinationally onto the ACS logic inside a single clock edge — which happens
+because the whole decoder is one `always` block using blocking assignments
+(issue 8), so the search reads metrics computed earlier in the same edge.
+
+| | hops on the critical path | logic | routing | total |
+|---|---|---|---|---|
+| `decoder` | 60 | 33.4 ns | 44.3 ns | 77.7 ns |
+| `decoder_term` | 14 | 12.7 ns | 24.2 ns | 36.9 ns |
+
+`decoder_term` sets `lowest_index = 0` outright, because a terminated trellis
+knows where the survivor ends. Deleting the search takes the path from 60 hops
+to 14 and roughly doubles Fmax, despite the design being 30% larger.
+
+For the unterminated decoder the fix is to register the end-state search rather
+than fold it into the same edge, costing one clock of latency. `getReturnPath()`
+is on the terminated variant's path but is not what limits either design today.
+
+Fmax varies by roughly ±0.5 MHz between placer seeds; the numbers above come
+from `results/synth/*_nextpnr.log` at seed 1.

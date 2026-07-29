@@ -159,6 +159,29 @@ with the surviving path from the Python model overlaid.
   </picture>
 </p>
 
+The terminated decoder, same view — twenty received bits, ten trellis stages,
+and no end-state search at all:
+
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/img/decoder_term_waveform-dark.png">
+    <img src="docs/img/decoder_term_waveform.png" alt="Terminated decoder waveform" width="880">
+  </picture>
+</p>
+
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/img/decoder_term_metrics-dark.png">
+    <img src="docs/img/decoder_term_metrics.png" alt="Path metrics with the zero tail" width="880">
+  </picture>
+</p>
+
+That last figure is the clearest picture of what termination does. Message
+`1011011` leaves the trellis in state `110`, and codeword bit 0 is corrupted —
+an error the unterminated decoder gets wrong. The three tail stages walk the
+survivor back down to `000`, which is why traceback can start there without
+searching.
+
 ### Correctness
 
 Both decoders are driven end to end from the encoder, for **every message ×
@@ -240,17 +263,20 @@ plus nextpnr-ice40, targeting a Lattice iCE40 UP5K in SG48:
 | Logic cells | 1810 / 5280 (34%) | 2356 / 5280 (44%) |
 | LUT4 / carry / flops | 1338 / 511 / 497 | 1936 / 799 / 703 |
 | Fmax | ~13 MHz | ~27 MHz |
-| Critical path | 77.7 ns | 36.9 ns |
+| Critical path | 77.7 ns, 60 hops | 36.9 ns, 14 hops |
 
 The terminated decoder being 30% larger is expected — three more trellis stages.
-Its being **twice as fast** is less obvious: the unterminated variant carries an
-eight-way minimum search over the final path metrics, evaluated combinationally
-inside one clock edge, which the terminated variant does not need because its
-end state is known. Fmax moves by roughly ±0.5 MHz between placer seeds.
+Its being **twice as fast** is less obvious, and the timing report gives a clear
+answer: in both designs the critical path ends at `lowest_index`, i.e. in the
+eight-way minimum-over-end-states search. Because the decoder is one `always`
+block using blocking assignments, that search is chained combinationally onto
+metrics computed earlier in the same clock edge. `decoder_term` has no search at
+all — a terminated trellis knows the survivor ends in state 0 — and the path
+drops from 60 hops to 14.
 
-Either way the ceiling is combinational depth in a single edge. Storing survivor
-pointers in a RAM instead of recomputing them from sentinels, or pipelining
-`getReturnPath()`, is the obvious next step.
+The obvious next step for the unterminated decoder is therefore to register the
+end-state search rather than fold it into the same edge, at the cost of one
+clock of latency. Fmax moves by roughly ±0.5 MHz between placer seeds.
 
 ---
 

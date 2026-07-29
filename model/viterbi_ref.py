@@ -270,13 +270,20 @@ def decode_terminated(word: int, n_bits: int = MSG_BITS) -> int:
     return msg
 
 
-def trellis_trace(word: int = CANONICAL_CW, n_bits: int = MSG_BITS):
-    """Metrics + survivors for plotting, plus the surviving state path."""
+def trellis_trace(word: int = CANONICAL_CW, n_bits: int = MSG_BITS,
+                  end_state: int | None = None):
+    """Metrics + survivors for plotting, plus the surviving state path.
+
+    ``n_bits`` is the number of trellis *stages*, so a terminated block passes
+    10 rather than 7, together with ``end_state=0``.
+    """
     received = [(word >> (2 * n_bits - 1 - i)) & 1 for i in range(2 * n_bits)]
-    bits, history, survivors = decode_bits(received, trace=True)
+    bits, history, survivors = decode_bits(received, trace=True,
+                                           end_state=end_state)
 
     final = history[-1]
-    end = min(range(N_STATES), key=lambda s: (final[s], s))
+    end = (end_state if end_state is not None
+           else min(range(N_STATES), key=lambda s: (final[s], s)))
     path = [end]
     state = end
     for k in range(n_bits - 1, -1, -1):

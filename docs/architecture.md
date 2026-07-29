@@ -156,17 +156,22 @@ Two things in that table are worth reading carefully.
 The terminated decoder is 30% larger, which is expected - three more trellis
 stages means three more `HammingTable` structs and three more ladder blocks.
 
-It is also **twice as fast**, which is not obvious. The structural difference is
-that the unterminated variant contains an eight-way minimum search over
-`temp_states` to find the best end state, evaluated combinationally within one
-clock edge; the terminated variant has no such search because the end state is
-known. Both critical paths run from `data[*]` into a stage's metric flops, and
-the unterminated one is more than twice as long. Fmax varies by roughly ±0.5 MHz
-between placer seeds, so treat these as approximate.
+It is also **twice as fast**, and the timing report says why. In both variants
+the critical path starts at `data`, runs through a stage's add-compare-select
+carry chains, and ends at the `lowest_index` register - that is, it ends in the
+eight-way minimum-over-end-states search. Because the whole decoder is one
+`always` block using blocking assignments, that search is chained
+combinationally onto metrics computed earlier in the *same* clock edge.
 
-Either way the ceiling is combinational depth evaluated in a single edge.
-Storing survivor pointers in a RAM instead of recomputing them from sentinels,
-or pipelining `getReturnPath()`, is the obvious next step.
+`decoder_term` does not have the search: a terminated trellis knows the survivor
+ends in state 0, so `lowest_index` is simply assigned 0. That takes the path
+from 60 hops to 14.
+
+So the ceiling is the end-state search, not the traceback tree - an earlier
+version of these notes said `getReturnPath()` and was wrong. The fix for the
+unterminated decoder is to register the search rather than fold it into the same
+edge, at the cost of one clock of latency. Fmax varies by roughly ±0.5 MHz
+between placer seeds, so treat the table as approximate.
 
 See also [bitorder.md](bitorder.md), [known-issues.md](known-issues.md),
 [toolchain.md](toolchain.md).

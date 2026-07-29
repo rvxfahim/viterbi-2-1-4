@@ -41,6 +41,7 @@ IMG_DIR = REPO / "docs" / "img"
 RTL_DECODER = ["rtl/decoder.sv"]
 RTL_ENCODER = ["rtl/d_ff.sv"]
 RTL_BOTH = ["rtl/decoder.sv", "rtl/d_ff.sv"]
+RTL_DECODER_TERM = ["rtl/decoder_term.sv"]
 RTL_BOTH_TERM = ["rtl/decoder_term.sv", "rtl/d_ff.sv"]
 
 GREEN, RED, YELLOW, DIM, RESET = (
@@ -156,6 +157,31 @@ def cmd_sim(args) -> None:
                 sys.stdout.write(proc.stdout)
                 raise SystemExit(f"decoder_bench {label} FAILED")
             _ok(f"decoder_bench {label:<5}  dat={dat}  out=1011000")
+
+    if only in (None, "decoder_term_bench"):
+        vl.build("decoder_term_bench", RTL_DECODER_TERM + ["tb/decoder_term_bench.sv"])
+        # One decode, so the waveform and the per-stage metrics can be plotted;
+        # system_term_tb's VCD covers 2688 cases and is far too large for that.
+        # Two decodes.  The canonical message keeps the waveform figure
+        # consistent with every other figure in the repo -- but it happens to
+        # end in state 000 already, so it would not show the tail doing any
+        # work.  The second case is chosen to: message 1011011 leaves the
+        # trellis in state 110, and its codeword bit 0 is flipped -- an error
+        # the unterminated decoder gets wrong (it returns 1011010).
+        for label, dat, exp in [
+            ("",      "11110111010111000000", "1011000"),
+            ("_tail", "11110111011011010110", "1011011"),
+        ]:
+            proc = vl.run(
+                "decoder_term_bench",
+                plusargs={"DAT": dat, "EXP": exp,
+                          "VCD": f"results/vcd/decoder_term_bench{label}.vcd"},
+                quiet=True, check=False,
+            )
+            if "PASS" not in proc.stdout or proc.returncode != 0:
+                sys.stdout.write(proc.stdout)
+                raise SystemExit(f"decoder_term_bench{label} FAILED")
+            _ok(f"decoder_term_bench  dat={dat}  out={exp}")
 
     if only in (None, "encoder_bench"):
         vl.build("encoder_bench", RTL_ENCODER + ["tb/encoder_bench.sv"])
@@ -287,7 +313,8 @@ def main() -> None:
     sub.add_parser("cpp").set_defaults(func=cmd_cpp)
 
     s = sub.add_parser("sim")
-    s.add_argument("--only", choices=["legacy", "decoder_bench", "encoder_bench"])
+    s.add_argument("--only", choices=["legacy", "decoder_bench",
+                                     "decoder_term_bench", "encoder_bench"])
     s.set_defaults(func=cmd_sim)
 
     sub.add_parser("sweep").set_defaults(func=cmd_sweep)

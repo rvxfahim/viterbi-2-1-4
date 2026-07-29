@@ -234,15 +234,15 @@ def draw_encoder_full(theme):
     return fig, "encoder_waveform"
 
 
-def _decoder_figure(theme, vcd_name, stem, title, subtitle):
+def _decoder_figure(theme, vcd_name, stem, title, subtitle, *, dat_width=14):
     tr = Trace(VCD_DIR / vcd_name)
     rows = [
         {"label": "clk",       "y": 6.0, "sig": "clk",     "kind": "bit",
          "ctl": True, "lw": 1.1},
         {"label": "reset",     "y": 5.0, "sig": "reset",   "kind": "bit", "ctl": True},
         {"label": "ready",     "y": 4.0, "sig": "ready",   "kind": "bit", "ctl": True},
-        {"label": "dat[13:0]", "y": 3.0, "sig": "dat",     "kind": "bus", "slot": 0,
-         "width": 14},
+        {"label": f"dat[{dat_width - 1}:0]", "y": 3.0, "sig": "dat",
+         "kind": "bus", "slot": 0, "width": dat_width},
         {"label": "steps_n",   "y": 2.0, "sig": "steps_n", "kind": "bus", "slot": 2},
         {"label": "stage_n",   "y": 1.0, "sig": "stage_n", "kind": "bus", "slot": 3},
         {"label": "out[6:0]",  "y": 0.0, "sig": "out",     "kind": "bus", "slot": 1,
@@ -277,26 +277,37 @@ def draw_decoder_error(theme):
         "demonstrate.")
 
 
-def draw_metrics(theme):
-    """The 8x7 path-metric matrix read straight out of the RTL.
+def draw_decoder_term(theme):
+    return _decoder_figure(
+        theme, "decoder_term_bench.vcd", "decoder_term_waveform",
+        "Terminated decoder — 20-bit block, survivor pinned to state 0",
+        "The same message, encoded with a three-bit zero tail: "
+        "dat = 11110111010111000000.\nsteps_n now walks ten stages rather than "
+        "seven, and traceback needs no end-state search.",
+        dat_width=20)
+
+
+def _metrics_figure(theme, vcd_name, stages, word, end_state, stem,
+                    title, subtitle):
+    """The 8 x `stages` path-metric matrix read straight out of the RTL.
 
     A view the original vendor flow could not produce: it dumped only top-level
-    testbench signals, so h1..h7 were invisible.  Each column is one trellis
+    testbench signals, so h1..hN were invisible.  Each column is one trellis
     stage's converged metrics; the survivor path from the Python model is
     overlaid to show the two agree.
     """
-    tr = Trace(VCD_DIR / "decoder_bench_error.vcd")
+    tr = Trace(VCD_DIR / vcd_name)
     t1 = tr.end
 
     # Each h<k> holds stage k's metrics; take the settled value at end of sim.
-    metrics = np.full((8, 7), np.nan)
-    for k in range(1, 8):
+    metrics = np.full((8, stages), np.nan)
+    for k in range(1, stages + 1):
         for s in range(8):
             _, v = tr.steps(f"h{k}.hammingDistances.finalStates[{s}]", t1)
             metrics[s, k - 1] = v[-1]
 
     # States unreachable that early carry a meaningless zero from reset.
-    for k in range(1, 8):
+    for k in range(1, stages + 1):
         reachable = min(2 ** k, 8)
         if reachable < 8:
             allowed = {0}
@@ -306,15 +317,15 @@ def draw_metrics(theme):
                 if s not in allowed:
                     metrics[s, k - 1] = np.nan
 
-    trace = ref.trellis_trace(ref.CANONICAL_CW ^ (1 << ref.CANONICAL_ERROR_BIT))
+    trace = ref.trellis_trace(word, stages, end_state=end_state)
     path = trace["path"]                    # path[k] = state after stage k
 
-    fig, ax = plt.subplots(figsize=(9.0, 5.0))
+    fig, ax = plt.subplots(figsize=(1.15 * stages + 1.0, 5.0))
     ramp = theme["seq"]
     vmax = np.nanmax(metrics)
 
     for s in range(8):
-        for k in range(7):
+        for k in range(stages):
             val = metrics[s, k]
             if np.isnan(val):
                 ax.add_patch(plt.Rectangle(
@@ -334,32 +345,71 @@ def draw_metrics(theme):
                     color=("#0b0b0b" if light else "#ffffff"))
 
     # survivor path on top
-    xs = list(range(1, 8))
-    ys = [path[k] + 1 for k in range(1, 8)]
+    xs = list(range(1, stages + 1))
+    ys = [path[k] + 1 for k in range(1, stages + 1)]
     # Open markers so the metric printed in each cell stays readable.
     ax.plot(xs, ys, color=theme["series"][1], lw=2.2, marker="o",
             markersize=17, markerfacecolor="none", markeredgewidth=2.2,
             zorder=10, label="surviving path (Python model)")
 
-    ax.set_xlim(0.4, 7.6)
+    # Mark where the message ends and the zero tail begins.
+    if end_state is not None and stages > ref.MSG_BITS:
+        ax.axvline(ref.MSG_BITS + 0.5, color=theme["ink"], lw=1.6)
+        # Only the tail is labelled: the divider and the x-axis label already
+        # say where the message ends, and a second caption here would run into
+        # the subtitle.
+        ax.annotate("zero tail", xy=((ref.MSG_BITS + stages + 2) / 2, 8.60),
+                    xytext=(0, 5), textcoords="offset points", ha="center",
+                    va="bottom", fontsize=9, fontweight="600",
+                    color=theme["ink2"], clip_on=False)
+
+    ax.set_xlim(0.4, stages + 0.6)
     ax.set_ylim(0.4, 8.6)
-    ax.set_xticks(range(1, 8))
-    ax.set_xticklabels([f"h{k}" for k in range(1, 8)])
+    ax.set_xticks(range(1, stages + 1))
+    ax.set_xticklabels([f"h{k}" for k in range(1, stages + 1)])
     ax.set_yticks(range(1, 9))
     ax.set_yticklabels([f"{s:03b}" for s in range(8)], fontfamily="monospace")
-    ax.set_xlabel("trellis stage  (message bit 1 → 7)")
     ax.set_ylabel("state  (q0 q1 q2)")
     ax.grid(False)
     vs.despine(ax, keep=())
     ax.tick_params(length=0)
-    vs.titles(ax,
-              "Inside the decoder — accumulated path metrics per stage",
-              "Read directly out of h1..h7 in the RTL, with dat[6] corrupted. "
-              "The original vendor flow\ncould not show this: it dumped only "
-              "top-level signals. Dashed cells are not yet reachable.",
-              theme)
+    vs.titles(ax, title, subtitle, theme)
     ax.legend(loc="upper left", bbox_to_anchor=(0, -0.12), frameon=False)
-    return fig, "decoder_metrics"
+    return fig, stem
+
+
+def draw_metrics(theme):
+    fig, stem = _metrics_figure(
+        theme, "decoder_bench_error.vcd", 7,
+        ref.CANONICAL_CW ^ (1 << ref.CANONICAL_ERROR_BIT), None,
+        "decoder_metrics",
+        "Inside the decoder — accumulated path metrics per stage",
+        "Read directly out of h1..h7 in the RTL, with dat[6] corrupted. "
+        "The original vendor flow\ncould not show this: it dumped only "
+        "top-level signals. Dashed cells are not yet reachable.")
+    fig.axes[0].set_xlabel("trellis stage  (message bit 1 → 7)")
+    return fig, stem
+
+
+#: A case chosen to show the tail doing work.  The canonical message already
+#: leaves the trellis in state 000, so its tail would confirm rather than
+#: correct.  1011011 ends in state 110, and its codeword bit 0 is flipped --
+#: exactly the error the unterminated decoder gets wrong (it returns 1011010).
+TERM_DEMO_MSG = 0b1011011
+TERM_DEMO_ERROR_BIT = 0
+
+
+def draw_metrics_term(theme):
+    fig, stem = _metrics_figure(
+        theme, "decoder_term_bench_tail.vcd", ref.TERM_STAGES,
+        ref.encode_terminated(TERM_DEMO_MSG) ^ (1 << TERM_DEMO_ERROR_BIT), 0,
+        "decoder_term_metrics",
+        "Inside the terminated decoder — the tail drives the survivor home",
+        "Message 1011011 leaves the trellis in state 110, and codeword bit 0 is "
+        "corrupted — an error\nthe unterminated decoder gets wrong. The three "
+        "tail stages walk the survivor back to 000.")
+    fig.axes[0].set_xlabel("trellis stage  (7 message bits + 3 tail bits)")
+    return fig, stem
 
 
 def main() -> None:
@@ -373,6 +423,12 @@ def main() -> None:
     vs.both_themes(draw_decoder_clean)
     vs.both_themes(draw_decoder_error)
     vs.both_themes(draw_metrics)
+    if (VCD_DIR / "decoder_term_bench.vcd").exists():
+        vs.both_themes(draw_decoder_term)
+        vs.both_themes(draw_metrics_term)
+    else:
+        print("  skipping terminated figures -- run: "
+              "python scripts/run_all.py sim")
 
 
 if __name__ == "__main__":
